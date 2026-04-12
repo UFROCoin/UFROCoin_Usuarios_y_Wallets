@@ -19,6 +19,7 @@ El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
 * Al clonar el repositorio por primera vez, instalar dependencias con: `python -m uv sync --all-extras`
 * Si cambian `pyproject.toml` o `uv.lock`, volver a ejecutar: `python -m uv sync --all-extras`
 * Levantar API en desarrollo: `python -m uv run uvicorn src.main:app --reload --port 8001`
+* Documentacion API (Swagger): `http://localhost:8001/docs`
 * Ejecutar tests: `python -m uv run pytest -q`
 
 ### ▶️ Opciones para correr el proyecto

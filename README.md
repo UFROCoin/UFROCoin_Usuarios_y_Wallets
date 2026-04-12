@@ -15,5 +15,15 @@ El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
 * [x] Pipeline de CI básico configurado.
 * [x] Entorno de desarrollo local validado.
 
+### ⚙️ Desarrollo Local con uv
+* Al clonar el repositorio por primera vez, instalar dependencias con: `python -m uv sync --all-extras`
+* Si cambian `pyproject.toml` o `uv.lock`, volver a ejecutar: `python -m uv sync --all-extras`
+* Levantar API en desarrollo: `python -m uv run uvicorn src.main:app --reload --port 8001`
+* Ejecutar tests: `python -m uv run pytest -q`
+
+### ▶️ Opciones para correr el proyecto
+* Opción 1 (API + MongoDB en Docker): `docker compose up --build`
+* Opción 2 (MongoDB en Docker + API local): `docker compose up -d mongo mongo-init` y luego `python -m uv run uvicorn src.main:app --reload --port 8001`
+
 ---
 *Desarrollado por el Equipo A/1*

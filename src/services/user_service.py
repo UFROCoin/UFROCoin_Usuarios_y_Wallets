@@ -11,8 +11,6 @@ from src.utils.dependencies import generate_wallet_address_mock, hash_password_m
 async def register_user_with_wallet(payload: UserRegister, db):
     users_collection = db["users"]
     wallets_collection = db["wallets"]
-    
-    #US-07: Definir la colección de transacciones
     transacciones_collection = db["transacciones"] 
 
     existing_user = await users_collection.find_one({"email": payload.email})

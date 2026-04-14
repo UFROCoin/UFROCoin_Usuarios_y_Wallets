@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from src.api.routes.auth import router as auth_router
-
+from src.api.routes.wallet import router as wallet_router
 
 app = FastAPI(title="UFROCoin API", version="0.1.0")
 
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
-
+app.include_router(wallet_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -33,7 +33,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             },
         },
     )
-
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -59,7 +58,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             },
         },
     )
-
 
 @app.get("/health")
 async def health_check():

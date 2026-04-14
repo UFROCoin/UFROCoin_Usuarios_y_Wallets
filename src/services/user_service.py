@@ -38,11 +38,11 @@ async def register_user_with_wallet(payload: UserRegister, db):
 
     wallet_document = {
         "address": wallet_address,
-        "balance": 100.0, #US-07: El saldo inicial ahora es 100
+        "balance": 100.0, 
         "created_at": now,
     }
     
-    #US-07: Documento que justifica los 100 UFROCoins
+   
     transaccion_genesis = {
         "tipo": "GENESIS",
         "desde": "SYSTEM_REWARD",
@@ -55,14 +55,14 @@ async def register_user_with_wallet(payload: UserRegister, db):
     try:
         async with await db.client.start_session() as session:
             async with session.start_transaction():
-                # Guarda el usuario
+             
                 user_result = await users_collection.insert_one(user_document, session=session)
 
-                # Guarda la wallet
+              
                 wallet_document["user_id"] = user_result.inserted_id
                 await wallets_collection.insert_one(wallet_document, session=session)
                 
-                # US-07: Guarda la transacción en la misma operación segura
+              
                 await transacciones_collection.insert_one(transaccion_genesis, session=session)
 
     except PyMongoError as exc:
@@ -78,7 +78,7 @@ async def register_user_with_wallet(payload: UserRegister, db):
     response_data = RegisterUserResponseData(
         user_id=str(user_result.inserted_id),
         wallet_address=wallet_address,
-        initial_balance=100.0, #US-07: Reflejar los 100 en la respuesta al Gateway
+        initial_balance=100.0, 
     )
     return ApiSuccessResponse(
         success=True,

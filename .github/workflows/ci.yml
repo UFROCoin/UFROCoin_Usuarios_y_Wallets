@@ -1,20 +1,57 @@
-name: CI Placeholder
+name: CI Modulo A
+
 on:
   push:
     branches:
-      - "**"
+      - main
+      - develop
   pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  setup-check:
-    name: Sprint 0 - Validacion de Entorno
+  test:
+    name: Tests Python
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
+
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
 
-      - name: Confirmacion de Pipeline
-        run: |
-          echo "Pipeline de CI para UFROCoin detectado y operativo."
-          echo "Estado: Sprint 0 - Entorno listo para desarrollo."
+      - name: Configurar Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sincronizar dependencias
+        run: python -m uv sync --all-extras
+
+      - name: Ejecutar tests
+        run: python -m uv run pytest -q
+
+  docker-build:
+    name: Build Docker API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v4
+
+      - name: Validar docker compose
+        run: docker compose config
+
+      - name: Construir imagen de la API
+        run: docker build -t ufrocoin-modulo-a-ci .

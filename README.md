@@ -26,5 +26,28 @@ El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
 * Opción 1 (API + MongoDB en Docker): `docker compose up --build`
 * Opción 2 (MongoDB en Docker + API local): `docker compose up -d mongo mongo-init` y luego `python -m uv run uvicorn src.main:app --reload --port 8001`
 
+### 🔐 Probar `GET /api/wallet/{address}` (Docker y Local)
+1. Registrar un usuario en Swagger con `POST /api/users/register` y guardar `user_id` + `wallet_address`.
+2. Generar un JWT con el `user_id` del registro.
+
+**Si corres API en contenedor (Opción 1):**
+```bash
+docker compose exec api python -c "import os, jwt; print(jwt.encode({'user_id':'<USER_ID>'}, os.getenv('SECRET_KEY'), algorithm='HS256'))"
+```
+
+**Si corres API local (Opción 2):**
+```bash
+python -c "import jwt; print(jwt.encode({'user_id':'<USER_ID>'}, '<SECRET_KEY>', algorithm='HS256'))"
+```
+
+Reemplaza `<USER_ID>` por el `user_id` retornado en `POST /api/users/register` y `<SECRET_KEY>` por el valor de `SECRET_KEY` definido en tu `.env`.
+
+3. En Swagger (`/docs`) usar **Authorize** y pegar: `Bearer <TOKEN>`.
+4. Ejecutar `GET /api/wallet/{address}` con la `wallet_address` del mismo usuario.
+
+Notas:
+- Si no envías token, el endpoint responde `401 Not authenticated`.
+- Si el `user_id` del token no coincide con el dueño de la wallet, responde `401 Unauthorized`.
+
 ---
 *Desarrollado por el Equipo A/1*

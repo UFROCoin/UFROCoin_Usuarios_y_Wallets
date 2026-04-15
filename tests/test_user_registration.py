@@ -45,6 +45,7 @@ class FakeTransaction:
         self.snapshot = {
             "users": copy.deepcopy(self.db.collections["users"].docs),
             "wallets": copy.deepcopy(self.db.collections["wallets"].docs),
+            "transacciones": copy.deepcopy(self.db.collections["transacciones"].docs),
         }
         return self
 
@@ -52,6 +53,7 @@ class FakeTransaction:
         if exc_type is not None:
             self.db.collections["users"].docs = self.snapshot["users"]
             self.db.collections["wallets"].docs = self.snapshot["wallets"]
+            self.db.collections["transacciones"].docs = self.snapshot["transacciones"]
         return False
 
 
@@ -82,6 +84,7 @@ class FakeDB:
         self.collections = {
             "users": FakeCollection(),
             "wallets": FakeCollection(),
+            "transacciones": FakeCollection(),
         }
         self.client = FakeClient(self)
 
@@ -98,13 +101,16 @@ async def test_us01_and_us04_register_user_and_wallet_success():
 
     assert response["success"] is True
     assert response["data"]["user_id"] == "id_1"
-    assert response["data"]["initial_balance"] == 0
+    assert response["data"]["initial_balance"] == 100.0
     assert re.fullmatch(r"^[a-f0-9]{40}$", response["data"]["wallet_address"])
 
     assert len(db["users"].docs) == 1
     assert len(db["wallets"].docs) == 1
+    assert len(db["transacciones"].docs) == 1
     assert db["wallets"].docs[0]["user_id"] == db["users"].docs[0]["_id"]
     assert db["wallets"].docs[0]["address"] == db["users"].docs[0]["wallet_address"]
+    assert db["users"].docs[0]["password_hash"] != payload.password
+    assert ":" in db["users"].docs[0]["password_hash"]
 
 
 @pytest.mark.asyncio
@@ -146,3 +152,4 @@ async def test_us04_rolls_back_user_when_wallet_insert_fails():
     assert exc_info.value.status_code == 500
     assert len(db["users"].docs) == 0
     assert len(db["wallets"].docs) == 0
+    assert len(db["transacciones"].docs) == 0

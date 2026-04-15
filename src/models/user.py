@@ -4,6 +4,21 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class UserRegister(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    nombre: str = Field(..., min_length=1, max_length=120)
-    email: EmailStr
-    password: str = Field(..., min_length=8)
+    nombre: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description="Nombre completo del usuario.",
+        examples=["Ana Perez"],
+    )
+    email: EmailStr = Field(
+        ...,
+        description="Correo electronico del usuario. Debe ser unico.",
+        examples=["ana.perez@ufrontera.cl"],
+    )
+    password: str = Field(
+        ...,
+        min_length=8,
+        description="Contraseña de acceso (minimo 8 caracteres).",
+        examples=["Segura123!"],
+    )

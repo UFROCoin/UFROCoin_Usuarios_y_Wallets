@@ -6,7 +6,27 @@ from fastapi.exceptions import RequestValidationError
 from src.api.routes.auth import router as auth_router
 from src.api.routes.wallet import router as wallet_router
 
-app = FastAPI(title="UFROCoin API", version="0.1.0")
+app = FastAPI(
+    title="UFROCoin API",
+    version="0.1.0",
+    description=(
+        "Modulo A de UFROCoin para gestion de usuarios y wallets. "
+        "Incluye registro de usuario con creacion de wallet y consulta segura de billeteras."
+    ),
+    contact={
+        "name": "Equipo A/1",
+    },
+    openapi_tags=[
+        {
+            "name": "Auth",
+            "description": "Operaciones de registro y autenticacion de usuarios.",
+        },
+        {
+            "name": "Wallet",
+            "description": "Operaciones de consulta de billeteras y saldos.",
+        },
+    ],
+)
 
 app.add_middleware(
     CORSMiddleware,

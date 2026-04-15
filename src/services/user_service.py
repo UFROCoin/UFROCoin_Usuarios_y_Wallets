@@ -11,6 +11,7 @@ from src.utils.dependencies import generate_wallet_address_mock, hash_password_m
 async def register_user_with_wallet(payload: UserRegister, db):
     users_collection = db["users"]
     wallets_collection = db["wallets"]
+    transacciones_collection = db["transacciones"] 
 
     existing_user = await users_collection.find_one({"email": payload.email})
     if existing_user:
@@ -37,17 +38,32 @@ async def register_user_with_wallet(payload: UserRegister, db):
 
     wallet_document = {
         "address": wallet_address,
-        "balance": 0,
+        "balance": 100.0, 
         "created_at": now,
+    }
+    
+   
+    transaccion_genesis = {
+        "tipo": "GENESIS",
+        "desde": "SYSTEM_REWARD",
+        "hacia": wallet_address,
+        "monto": 100.0,
+        "estado": "CONFIRMED",
+        "timestamp": now,
     }
 
     try:
         async with await db.client.start_session() as session:
             async with session.start_transaction():
+             
                 user_result = await users_collection.insert_one(user_document, session=session)
 
+              
                 wallet_document["user_id"] = user_result.inserted_id
                 await wallets_collection.insert_one(wallet_document, session=session)
+                
+              
+                await transacciones_collection.insert_one(transaccion_genesis, session=session)
 
     except PyMongoError as exc:
         raise HTTPException(
@@ -62,7 +78,7 @@ async def register_user_with_wallet(payload: UserRegister, db):
     response_data = RegisterUserResponseData(
         user_id=str(user_result.inserted_id),
         wallet_address=wallet_address,
-        initial_balance=0,
+        initial_balance=100.0, 
     )
     return ApiSuccessResponse(
         success=True,

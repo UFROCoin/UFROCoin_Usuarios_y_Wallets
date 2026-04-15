@@ -34,12 +34,14 @@ jobs:
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Sincronizar dependencias
-        run: python -m uv sync --all-extras
+        run: uv sync --all-extras
 
       - name: Ejecutar tests
-        run: python -m uv run pytest -q
+        run: uv run pytest -q
 
   docker-build:
     name: Build Docker API
@@ -49,6 +51,17 @@ jobs:
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
+
+      - name: Crear .env para CI
+        run: |
+          {
+            echo "MONGODB_URL=mongodb://localhost:27017"
+            echo "MONGODB_DB_NAME=${{ vars.MONGODB_DB_NAME }}"
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}"
+            echo "JWT_ALGORITHM=${{ vars.JWT_ALGORITHM }}"
+            echo "GENESIS_SENDER=${{ vars.GENESIS_SENDER }}"
+            echo "INITIAL_WALLET_BALANCE=${{ vars.INITIAL_WALLET_BALANCE }}"
+          } > .env
 
       - name: Validar docker compose
         run: docker compose config

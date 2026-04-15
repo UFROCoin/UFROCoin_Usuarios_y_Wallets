@@ -1,18 +1,23 @@
-import os
-
 import jwt
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 
-security = HTTPBearer()
+from src.core.config import settings
 
-SECRET_KEY = os.getenv("SECRET_KEY", "tu_clave_secreta_super_segura")
+security = HTTPBearer(
+    scheme_name="BearerAuth",
+    description="Ingrese el token JWT con el formato: Bearer <token>",
+)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
         user_id: str = payload.get("user_id")
 
         if user_id is None:

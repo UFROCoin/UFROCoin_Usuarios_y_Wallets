@@ -11,13 +11,77 @@ router = APIRouter(tags=["Wallet"])
 @router.get(
     "/api/wallet/{address}",
     response_model=WalletSuccessResponse,
+    summary="Consultar wallet por direccion",
+    description=(
+        "Obtiene el detalle de una wallet por su direccion. "
+        "Requiere token Bearer valido y solo permite consultar wallets del usuario autenticado."
+    ),
+    operation_id="getWalletByAddress",
+    response_description="Wallet consultada correctamente.",
     responses={
-        401: {"model": ApiErrorResponse},
-        404: {"model": ApiErrorResponse},
+        200: {
+            "description": "Wallet consultada correctamente.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Wallet consultada correctamente.",
+                        "data": {
+                            "address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                            "balance": 100.0,
+                            "created_at": "2026-03-30T12:00:00Z",
+                        },
+                        "error": {
+                            "code": "",
+                            "details": "",
+                        },
+                    }
+                }
+            },
+        },
+        401: {
+            "model": ApiErrorResponse,
+            "description": "Token invalido o usuario sin permisos sobre la wallet.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No tienes permisos para consultar esta billetera.",
+                        "data": {},
+                        "error": {
+                            "code": "UNAUTHORIZED",
+                            "details": "Token invalido o usuario sin permisos sobre la wallet.",
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "model": ApiErrorResponse,
+            "description": "La wallet solicitada no existe.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "La billetera especificada no existe.",
+                        "data": {},
+                        "error": {
+                            "code": "WALLET_NOT_FOUND",
+                            "details": "La wallet solicitada no existe.",
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 async def consultar_wallet(
-    address: str = Path(..., pattern=r"^[a-f0-9]{40}$"),
+    address: str = Path(
+        ...,
+        pattern=r"^[a-f0-9]{40}$",
+        description="Direccion de wallet en formato hexadecimal de 40 caracteres.",
+        examples=["a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10"],
+    ),
     db = Depends(get_database), 
     current_user = Depends(get_current_user)
 )-> WalletSuccessResponse:

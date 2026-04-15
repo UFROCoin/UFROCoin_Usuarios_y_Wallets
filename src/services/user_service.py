@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 
+from src.core.config import settings
 from src.models.api_response import ApiSuccessResponse, RegisterUserResponseData
 from src.models.user import UserRegister
 from src.utils.security import hash_contrasena
@@ -55,16 +56,16 @@ async def register_user_with_wallet(payload: UserRegister, db):
 
     wallet_document = {
         "address": wallet_address,
-        "balance": 100.0, 
+        "balance": settings.initial_wallet_balance,
         "created_at": now,
     }
     
    
     transaccion_genesis = {
         "tipo": "GENESIS",
-        "desde": "SYSTEM_REWARD",
+        "desde": settings.genesis_sender,
         "hacia": wallet_address,
-        "monto": 100.0,
+        "monto": settings.initial_wallet_balance,
         "estado": "CONFIRMED",
         "timestamp": now,
     }
@@ -95,7 +96,7 @@ async def register_user_with_wallet(payload: UserRegister, db):
     response_data = RegisterUserResponseData(
         user_id=str(user_result.inserted_id),
         wallet_address=wallet_address,
-        initial_balance=100.0, 
+        initial_balance=settings.initial_wallet_balance,
     )
     return ApiSuccessResponse(
         success=True,

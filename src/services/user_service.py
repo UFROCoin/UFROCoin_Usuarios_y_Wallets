@@ -5,7 +5,8 @@ from pymongo.errors import PyMongoError
 
 from src.models.api_response import ApiSuccessResponse, RegisterUserResponseData
 from src.models.user import UserRegister
-from src.utils.dependencies import generate_wallet_address_mock, hash_password_mock
+from src.utils.security import hash_contrasena
+from src.utils.wallet import generar_direccion_wallet
 
 
 async def register_user_with_wallet(payload: UserRegister, db):
@@ -24,9 +25,25 @@ async def register_user_with_wallet(payload: UserRegister, db):
             },
         )
 
-    wallet_address = generate_wallet_address_mock()
-    password_hash = hash_password_mock(payload.password)
     now = datetime.now(timezone.utc)
+    wallet_address_result = generar_direccion_wallet(
+        email=payload.email,
+        timestamp_registro=now.isoformat(),
+    )
+    password_hash_result = hash_contrasena(payload.password)
+
+    if wallet_address_result["status"] != "ok" or password_hash_result["status"] != "ok":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Datos invalidos o contrasena debil.",
+                "code": "VALIDATION_ERROR",
+                "details": "No fue posible generar la wallet o proteger la contrasena.",
+            },
+        )
+
+    wallet_address = wallet_address_result["data"]["direccion"]
+    password_hash = password_hash_result["data"]["hash"]
 
     user_document = {
         "nombre": payload.nombre,

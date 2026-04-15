@@ -1,1 +1,0 @@
-"""UFROCoin Modulo A package."""

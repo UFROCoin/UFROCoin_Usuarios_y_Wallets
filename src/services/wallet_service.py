@@ -45,5 +45,6 @@ async def obtener_detalle_wallet(address: str, db: AsyncIOMotorDatabase):
     return {
         "address": wallet["address"],
         "owner_id": str(wallet["user_id"]),
-        "balance": saldo_actual
+        "balance": saldo_actual,
+        "created_at": wallet["created_at"],
     }

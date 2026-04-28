@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -5,6 +6,14 @@ from fastapi.exceptions import RequestValidationError
 
 from src.api.routes.auth import router as auth_router
 from src.api.routes.wallet import router as wallet_router
+from src.core.database import create_indexes
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Acciones al iniciar la aplicacion
+    await create_indexes()
+    yield
+    # Acciones al detener la aplicacion (opcional)
 
 app = FastAPI(
     title="UFROCoin API",
@@ -13,6 +22,7 @@ app = FastAPI(
         "Modulo A de UFROCoin para gestion de usuarios y wallets. "
         "Incluye registro de usuario con creacion de wallet y consulta segura de billeteras."
     ),
+    lifespan=lifespan,
     contact={
         "name": "Equipo A/1",
     },

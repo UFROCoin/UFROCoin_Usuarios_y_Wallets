@@ -33,6 +33,7 @@ htmlcov/
 # Project specific
 .atl/
 openspec/
+GEMINI.md
 
 # OS files
 .DS_Store

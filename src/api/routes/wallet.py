@@ -2,15 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 
 from src.core.database import get_database
 from src.core.security import get_current_user
-from src.models.api_response import ApiErrorResponse
-from src.models.wallet import WalletResponseData, WalletSuccessResponse
+from src.models.api_response import ApiErrorResponse, ApiSuccessResponse
+from src.models.wallet import WalletResponseData
 from src.services.wallet_service import obtener_detalle_wallet
 
 router = APIRouter(tags=["Wallet"])
 
 @router.get(
     "/api/wallet/{address}",
-    response_model=WalletSuccessResponse,
+    response_model=ApiSuccessResponse[WalletResponseData],
     summary="Consultar wallet por direccion",
     description=(
         "Obtiene el detalle de una wallet por su direccion. "
@@ -20,6 +20,7 @@ router = APIRouter(tags=["Wallet"])
     response_description="Wallet consultada correctamente.",
     responses={
         200: {
+            "model": ApiSuccessResponse[WalletResponseData],
             "description": "Wallet consultada correctamente.",
             "content": {
                 "application/json": {
@@ -84,7 +85,7 @@ async def consultar_wallet(
     ),
     db = Depends(get_database), 
     current_user = Depends(get_current_user)
-)-> WalletSuccessResponse:
+)-> ApiSuccessResponse[WalletResponseData]:
 
     wallet_data = await obtener_detalle_wallet(address, db)
     
@@ -103,9 +104,9 @@ async def consultar_wallet(
         balance=wallet_data["balance"],
         created_at=wallet_data["created_at"],
     )
-    return WalletSuccessResponse(
+    return ApiSuccessResponse[WalletResponseData](
         success=True,
         message="Wallet consultada correctamente.",
         data=wallet_response_data,
-        error={"code": "", "details": ""},
+        error={"code": "", "details": ""}
     )

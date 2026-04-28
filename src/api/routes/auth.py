@@ -1,12 +1,55 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.core.config import settings
 from src.core.database import get_database
-from src.models.api_response import ApiErrorResponse, ApiSuccessResponse
-from src.models.user import UserRegister
-from src.services.user_service import register_user_with_wallet
+from src.models.api_response import (
+    ApiErrorResponse, 
+    ApiSuccessResponse, 
+    LoginResponseData,
+    RegisterUserResponseData
+)
+from src.models.user import UserRegister, LoginRequest
+from src.services.user_service import register_user_with_wallet, authenticate_user
+from src.services.token_service import generate_token
 
 
 router = APIRouter(tags=["Auth"])
+
+
+@router.post(
+    "/api/users/login",
+    status_code=status.HTTP_200_OK,
+    summary="Autenticar usuario",
+    description="Autentica al usuario con email y contrasena, retornando un token JWT.",
+    operation_id="loginUser",
+    response_model=ApiSuccessResponse[LoginResponseData],
+    responses={
+        200: {"model": ApiSuccessResponse[LoginResponseData]},
+        401: {"model": ApiErrorResponse},
+    }
+)
+async def login(payload: LoginRequest, db=Depends(get_database)):
+    user = await authenticate_user(payload.email, payload.password, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "Credenciales invalidas.",
+                "code": "INVALID_CREDENTIALS",
+                "details": "El email o la contrasena son incorrectos."
+            }
+        )
+    
+    token = generate_token(str(user["_id"]), user["wallet_address"])
+    
+    return ApiSuccessResponse[LoginResponseData](
+        message="Login exitoso.",
+        data=LoginResponseData(
+            access_token=token,
+            token_type="Bearer",
+            expires_in=settings.jwt_expire_hours * 3600
+        )
+    )
 
 
 @router.post(
@@ -18,10 +61,11 @@ router = APIRouter(tags=["Auth"])
         "El email debe ser unico y la contrasena debe cumplir las reglas minimas de validacion."
     ),
     operation_id="registerUser",
-    response_model=ApiSuccessResponse,
+    response_model=ApiSuccessResponse[RegisterUserResponseData],
     response_description="Usuario registrado correctamente junto con su wallet.",
     responses={
         201: {
+            "model": ApiSuccessResponse[RegisterUserResponseData],
             "description": "Usuario registrado correctamente junto con su wallet.",
             "content": {
                 "application/json": {

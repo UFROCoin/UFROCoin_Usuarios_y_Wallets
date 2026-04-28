@@ -1,34 +1,64 @@
 # UFROCoin | Módulo A: Usuarios & Wallets 🪙
 
-Este componente gestiona la identidad y seguridad del ecosistema UFROCoin, encargándose del registro de usuarios, autenticación y gestión de billeteras digitales.
+Este componente es la **puerta de entrada** al ecosistema de UFROCoin. Su función principal es gestionar la identidad de los participantes y proporcionarles las herramientas criptográficas necesarias para interactuar con la blockchain.
 
 ### 📝 Descripción del Módulo
-El Módulo A implementa la capa base de confianza del proyecto:
-* **Gestión de Identidad:** Registro de usuarios con validación de campos y autenticación JWT.
-* **Seguridad:** Hashing de contraseñas mediante SHA-256 con salt aleatorio (ADR-002).
-* **Billeteras Digitales (Wallets):** Creación automática de wallets (40 caracteres hex) al registrarse, con saldo inicial y transacción génesis.
-* **API Estandarizada:** Alineación total con el contrato de [Apidog](https://ufrocoinproposal.apidog.io/).
+El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
+* **Gestión de Identidad:** Registro y autenticación de usuarios.
+* **Billeteras Digitales (Wallets):** Generación de pares de llaves (pública/privada) para firmar transacciones.
+* **Persistencia:** Almacenamiento de perfiles y saldos en MongoDB.
+* **Seguridad:** Implementación de hashing SHA-256 para la integridad de los datos.
 
-### 🚀 Funcionalidades Implementadas (Sprint 1)
-* [x] **US-01:** Registro de usuario y validación de campos.
-* [x] **US-02:** Seguridad mediante Hashing SHA-256 + Salt.
+### 🚀 Estado del Proyecto (Sprint 0)
+* [x] Estructura de carpetas inicial.
+* [x] Stack tecnológico definido (FastAPI, MongoDB, Vue.js, Docker).
+* [x] Pipeline de CI básico configurado.
+* [x] Entorno de desarrollo local validado.
+
+### 🎯 Funcionalidades Implementadas (Sprint 1)
+* [x] **US-01/02:** Registro de usuario con Hashing SHA-256 + Salt.
 * [x] **US-03/04:** Generación de dirección de Wallet y vinculación automática.
-* [x] **US-05/06:** Autenticación de usuario y entrega de Token JWT.
+* [x] **US-05/06:** Autenticación de usuario y entrega de Token JWT en `/api/users/login`.
 * [x] **US-07:** Emisión de Transacción Génesis (Welcome Reward).
-* [x] **US-08:** Endpoint de consulta de Wallet con cálculo de saldo real.
-* [x] **TECH-04/05:** Refactor de respuestas genéricas y alineación de contrato.
+* [x] **US-08:** Endpoint de consulta de Wallet con cálculo de saldo real en `/api/wallet/{address}`.
+* [x] **TECH-04/05:** Refactor de respuestas genéricas y alineación de contrato Apidog.
+
+### 📦 Justificación de Nuevas Dependencias
+* **`httpx`**: Se agregó esta dependencia exclusivamente para habilitar las pruebas de integración asíncronas (`TestClient` de FastAPI requiere `httpx` para los endpoints asíncronos en los tests del pipeline de CI/CD).
 
 ### ⚙️ Desarrollo Local con uv
-* Instalar dependencias: `python -m uv sync --all-extras`
-* Levantar API: `python -m uv run uvicorn src.main:app --reload --port 8001`
-* Ejecutar tests: `python -m uv run pytest`
+* Al clonar el repositorio por primera vez, instalar dependencias con: `python -m uv sync --all-extras`
+* Si cambian `pyproject.toml` o `uv.lock`, volver a ejecutar: `python -m uv sync --all-extras`
+* Levantar API en desarrollo: `python -m uv run uvicorn src.main:app --reload --port 8001`
+* Documentacion API (Swagger): `http://localhost:8001/docs`
+* Ejecutar tests: `python -m uv run pytest -q`
 
-### 🛠️ API Endpoints (Contrato Apidog)
-Todas las respuestas siguen el formato: `{ "success": bool, "message": string, "data": {}, "error": {...} }`
+### ▶️ Opciones para correr el proyecto
+* Opción 1 (API + MongoDB en Docker): `docker compose up --build`
+* Opción 2 (MongoDB en Docker + API local): `docker compose up -d mongo mongo-init` y luego `python -m uv run uvicorn src.main:app --reload --port 8001`
 
-* `POST /api/users/register`: Registro de nuevo usuario.
-* `POST /api/users/login`: Autenticación y obtención de JWT.
-* `GET /api/wallet/{address}`: Detalle de wallet y saldo (Requiere JWT).
+### 🔐 Probar `GET /api/wallet/{address}` (Docker y Local)
+1. Registrar un usuario en Swagger con `POST /api/users/register` y guardar `user_id` + `wallet_address`.
+2. Generar un JWT con el `user_id` del registro.
+
+**Si corres API en contenedor (Opción 1):**
+```bash
+docker compose exec api python -c "import os, jwt; print(jwt.encode({'user_id':'<USER_ID>'}, os.getenv('SECRET_KEY'), algorithm='HS256'))"
+```
+
+**Si corres API local (Opción 2):**
+```bash
+python -c "import jwt; print(jwt.encode({'user_id':'<USER_ID>'}, '<SECRET_KEY>', algorithm='HS256'))"
+```
+
+Reemplaza `<USER_ID>` por el `user_id` retornado en `POST /api/users/register` y `<SECRET_KEY>` por el valor de `SECRET_KEY` definido en tu `.env`.
+
+3. En Swagger (`/docs`) usar **Authorize** y pegar: `Bearer <TOKEN>`.
+4. Ejecutar `GET /api/wallet/{address}` con la `wallet_address` del mismo usuario.
+
+Notas:
+- Si no envías token, el endpoint responde `401 Not authenticated`.
+- Si el `user_id` del token no coincide con el dueño de la wallet, responde `401 Unauthorized`.
 
 ---
 *Desarrollado por el Equipo A/1*

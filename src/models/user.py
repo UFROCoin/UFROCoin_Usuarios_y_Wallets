@@ -22,3 +22,10 @@ class UserRegister(BaseModel):
         description="Contraseña de acceso (minimo 8 caracteres).",
         examples=["Segura123!"],
     )
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr = Field(..., description="Email del usuario.")
+    password: str = Field(..., description="Contraseña del usuario.")

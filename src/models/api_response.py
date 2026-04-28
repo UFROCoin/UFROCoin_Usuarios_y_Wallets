@@ -1,7 +1,8 @@
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+T = TypeVar("T")
 
 class ApiErrorDetail(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -67,18 +68,22 @@ class RegisterUserResponseData(BaseModel):
     )
 
 
-class ApiSuccessResponse(BaseModel):
+class LoginResponseData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    access_token: str = Field(..., description="Token JWT de acceso.")
+    token_type: str = Field(default="Bearer", description="Tipo de token.")
+    expires_in: int = Field(..., description="Tiempo de expiracion en segundos.")
+
+
+class ApiSuccessResponse(BaseModel, Generic[T]):
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "example": {
                 "success": True,
-                "message": "Usuario registrado correctamente.",
-                "data": {
-                    "user_id": "67f7d1d2f2a80f2f9f2d1a12",
-                    "wallet_address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
-                    "initial_balance": 100.0,
-                },
+                "message": "Operacion exitosa.",
+                "data": {},
                 "error": {
                     "code": "",
                     "details": "",
@@ -91,7 +96,8 @@ class ApiSuccessResponse(BaseModel):
     message: str = Field(
         ...,
         description="Mensaje legible para el cliente.",
-        examples=["Usuario registrado correctamente."],
     )
-    data: RegisterUserResponseData
-    error: ApiErrorDetail
+    data: T
+    error: ApiErrorDetail = Field(
+        default_factory=lambda: ApiErrorDetail(code="", details="")
+    )

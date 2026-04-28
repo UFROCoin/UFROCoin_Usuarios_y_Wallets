@@ -30,6 +30,10 @@ htmlcov/
 .idea/
 .vscode/
 
+# Project specific
+.atl/
+openspec/
+
 # OS files
 .DS_Store
 Thumbs.db

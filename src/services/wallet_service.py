@@ -2,7 +2,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
 
 async def calcular_saldo_real(wallet_address: str, db: AsyncIOMotorDatabase) -> float:
-  
+    """
+    Calcula el saldo real de una wallet agregando ingresos y egresos.
+    """
     pipeline_ingresos = [
         {"$match": {"hacia": wallet_address, "estado": "CONFIRMED"}},
         {"$group": {"_id": None, "total": {"$sum": "$monto"}}}
@@ -20,6 +22,18 @@ async def calcular_saldo_real(wallet_address: str, db: AsyncIOMotorDatabase) -> 
     total_egresos = egresos_res[0]["total"] if egresos_res else 0.0
 
     return float(total_ingresos - total_egresos)
+
+
+async def obtener_transacciones_recientes(wallet_address: str, db: AsyncIOMotorDatabase, limite: int = 5):
+    """
+    Obtiene las transacciones mas recientes de una wallet.
+    """
+    cursor = db["transacciones"].find(
+        {"$or": [{"desde": wallet_address}, {"hacia": wallet_address}]}
+    ).sort("timestamp", -1).limit(limite)
+    
+    return await cursor.to_list(limite)
+
 
 async def obtener_detalle_wallet(address: str, db: AsyncIOMotorDatabase):
     """

@@ -4,10 +4,32 @@ from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 
 from src.core.config import settings
-from src.models.api_response import ApiSuccessResponse, RegisterUserResponseData
+from src.models.api_response import (
+    ApiSuccessResponse, 
+    RegisterUserResponseData
+)
 from src.models.user import UserRegister
-from src.utils.security import hash_contrasena
+from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
+from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
+
+
+async def authenticate_user(email: str, password: str, db):
+    """
+    Valida las credenciales de un usuario.
+    Retorna el documento del usuario si es valido, False de lo contrario.
+    """
+    users_collection = db["users"]
+    user = await users_collection.find_one({"email": email})
+    
+    if not user:
+        return False
+        
+    verification = verificar_contrasena(password, user["password_hash"])
+    if verification["status"] == "ok" and verification["data"]["valid"]:
+        return user
+        
+    return False
 
 
 async def register_user_with_wallet(payload: UserRegister, db):

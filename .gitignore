@@ -34,6 +34,7 @@ htmlcov/
 .atl/
 openspec/
 GEMINI.md
+AGENTS.md
 
 # OS files
 .DS_Store

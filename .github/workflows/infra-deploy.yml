@@ -1,0 +1,77 @@
+name: Infra Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  infra-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 1. Steps que consideren necesarios
+      # -----------------------------------------------------------------
+      - name: Build checks
+        run: |
+          touch .env
+          docker compose config
+
+      # -----------------------------------------------------------------
+      # 2. Login a GHCR
+      # -----------------------------------------------------------------
+      - name: Login a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------
+      # 3. Build y push de la imagen
+      # -----------------------------------------------------------------
+      - name: Convertir nombre del repositorio a minusculas
+        run: echo "REPO_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Build y push de imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ env.REPO_NAME }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}:latest
+
+      # -----------------------------------------------------------------
+      # 4. Generar token efimero desde GitHub App
+      # -----------------------------------------------------------------
+      - name: Generar token desde GitHub App
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          repositories: ufrocoin_infra
+
+      # -----------------------------------------------------------------
+      # 5. Dispatch al repo de infraestructura
+      # -----------------------------------------------------------------
+      - name: Dispatch al repo de infraestructura
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: ufrocoin/ufrocoin_infra
+          event-type: deploy-users
+          client-payload: |
+            {
+              "service_name": "api-users",
+              "env_var": "USERS_TAG",
+              "image_tag": "${{ github.sha }}"
+            }

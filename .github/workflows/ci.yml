@@ -1,20 +1,70 @@
-name: CI Placeholder
+name: CI Modulo A
+
 on:
   push:
     branches:
-      - "**"
+      - main
+      - develop
   pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  setup-check:
-    name: Sprint 0 - Validacion de Entorno
+  test:
+    name: Tests Python
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
+
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
 
-      - name: Confirmacion de Pipeline
+      - name: Configurar Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Sincronizar dependencias
+        run: uv sync --all-extras
+
+      - name: Ejecutar tests
+        run: uv run pytest -q
+
+  docker-build:
+    name: Build Docker API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v4
+
+      - name: Crear .env para CI
         run: |
-          echo "Pipeline de CI para UFROCoin detectado y operativo."
-          echo "Estado: Sprint 0 - Entorno listo para desarrollo."
+          {
+            echo "MONGODB_URL=mongodb://localhost:27017"
+            echo "MONGODB_DB_NAME=${{ vars.MONGODB_DB_NAME }}"
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}"
+            echo "JWT_ALGORITHM=${{ vars.JWT_ALGORITHM }}"
+            echo "GENESIS_SENDER=${{ vars.GENESIS_SENDER }}"
+            echo "INITIAL_WALLET_BALANCE=${{ vars.INITIAL_WALLET_BALANCE }}"
+          } > .env
+
+      - name: Validar docker compose
+        run: docker compose config
+
+      - name: Construir imagen de la API
+        run: docker build -t ufrocoin-modulo-a-ci .

@@ -1,0 +1,142 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from src.core.config import settings
+from src.core.database import get_database
+from src.models.api_response import (
+    ApiErrorResponse, 
+    ApiSuccessResponse, 
+    LoginResponseData,
+    RegisterUserResponseData
+)
+from src.models.user import UserRegister, LoginRequest
+from src.services.user_service import register_user_with_wallet, authenticate_user
+from src.services.token_service import generate_token
+
+
+router = APIRouter(tags=["Auth"])
+
+
+@router.post(
+    "/api/users/login",
+    status_code=status.HTTP_200_OK,
+    summary="Autenticar usuario",
+    description="Autentica al usuario con email y contrasena, retornando un token JWT.",
+    operation_id="loginUser",
+    response_model=ApiSuccessResponse[LoginResponseData],
+    responses={
+        200: {"model": ApiSuccessResponse[LoginResponseData]},
+        401: {"model": ApiErrorResponse},
+    }
+)
+async def login(payload: LoginRequest, db=Depends(get_database)):
+    user = await authenticate_user(payload.email, payload.password, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "Credenciales invalidas.",
+                "code": "INVALID_CREDENTIALS",
+                "details": "El email o la contrasena son incorrectos."
+            }
+        )
+    
+    token = generate_token(str(user["_id"]), user["wallet_address"])
+    
+    return ApiSuccessResponse[LoginResponseData](
+        message="Login exitoso.",
+        data=LoginResponseData(
+            access_token=token,
+            token_type="Bearer",
+            expires_in=settings.jwt_expire_hours * 3600
+        )
+    )
+
+
+@router.post(
+    "/api/users/register",
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar usuario",
+    description=(
+        "Registra un nuevo usuario y crea su wallet asociada con saldo inicial. "
+        "El email debe ser unico y la contrasena debe cumplir las reglas minimas de validacion."
+    ),
+    operation_id="registerUser",
+    response_model=ApiSuccessResponse[RegisterUserResponseData],
+    response_description="Usuario registrado correctamente junto con su wallet.",
+    responses={
+        201: {
+            "model": ApiSuccessResponse[RegisterUserResponseData],
+            "description": "Usuario registrado correctamente junto con su wallet.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Usuario registrado correctamente.",
+                        "data": {
+                            "user_id": "67f7d1d2f2a80f2f9f2d1a12",
+                            "wallet_address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                            "initial_balance": 100.0,
+                        },
+                        "error": {
+                            "code": "",
+                            "details": "",
+                        },
+                    }
+                }
+            },
+        },
+        400: {
+            "model": ApiErrorResponse,
+            "description": "Datos invalidos o contraseña debil.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Datos invalidos o contrasena debil.",
+                        "data": {},
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "details": "No fue posible generar la wallet o proteger la contrasena.",
+                        },
+                    }
+                }
+            },
+        },
+        409: {
+            "model": ApiErrorResponse,
+            "description": "El email ya se encuentra registrado.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "El email ya existe.",
+                        "data": {},
+                        "error": {
+                            "code": "EMAIL_ALREADY_EXISTS",
+                            "details": "Ya existe un usuario registrado con el email proporcionado.",
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "model": ApiErrorResponse,
+            "description": "Error interno al ejecutar la transaccion de registro.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible completar el registro.",
+                        "data": {},
+                        "error": {
+                            "code": "TRANSACTION_ERROR",
+                            "details": "Fallo en la transaccion de creacion de usuario y wallet.",
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def register(payload: UserRegister, db=Depends(get_database)):
+    return await register_user_with_wallet(payload=payload, db=db)

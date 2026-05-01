@@ -15,5 +15,50 @@ El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
 * [x] Pipeline de CI básico configurado.
 * [x] Entorno de desarrollo local validado.
 
+### 🎯 Funcionalidades Implementadas (Sprint 1)
+* [x] **US-01/02:** Registro de usuario con Hashing SHA-256 + Salt.
+* [x] **US-03/04:** Generación de dirección de Wallet y vinculación automática.
+* [x] **US-05/06:** Autenticación de usuario y entrega de Token JWT en `/api/users/login`.
+* [x] **US-07:** Emisión de Transacción Génesis (Welcome Reward).
+* [x] **US-08:** Endpoint de consulta de Wallet con cálculo de saldo real en `/api/wallet/{address}`.
+* [x] **TECH-04/05:** Refactor de respuestas genéricas y alineación de contrato Apidog.
+
+### 📦 Justificación de Nuevas Dependencias
+* **`httpx`**: Se agregó esta dependencia exclusivamente para habilitar las pruebas de integración asíncronas (`TestClient` de FastAPI requiere `httpx` para los endpoints asíncronos en los tests del pipeline de CI/CD).
+
+### ⚙️ Desarrollo Local con uv
+* Al clonar el repositorio por primera vez, instalar dependencias con: `python -m uv sync --all-extras`
+* Si cambian `pyproject.toml` o `uv.lock`, volver a ejecutar: `python -m uv sync --all-extras`
+* Levantar API en desarrollo: `python -m uv run uvicorn src.main:app --reload --port 8001`
+* Documentacion API (Swagger): `http://localhost:8001/docs`
+* Ejecutar tests: `python -m uv run pytest -q`
+
+### ▶️ Opciones para correr el proyecto
+* Opción 1 (API + MongoDB en Docker): `docker compose up --build`
+* Opción 2 (MongoDB en Docker + API local): `docker compose up -d mongo mongo-init` y luego `python -m uv run uvicorn src.main:app --reload --port 8001`
+
+### 🔐 Probar `GET /api/wallet/{address}` (Docker y Local)
+1. Registrar un usuario en Swagger con `POST /api/users/register` y guardar `user_id` + `wallet_address`.
+2. Generar un JWT con el `user_id` del registro.
+
+**Si corres API en contenedor (Opción 1):**
+```bash
+docker compose exec api python -c "import os, jwt; print(jwt.encode({'user_id':'<USER_ID>'}, os.getenv('SECRET_KEY'), algorithm='HS256'))"
+```
+
+**Si corres API local (Opción 2):**
+```bash
+python -c "import jwt; print(jwt.encode({'user_id':'<USER_ID>'}, '<SECRET_KEY>', algorithm='HS256'))"
+```
+
+Reemplaza `<USER_ID>` por el `user_id` retornado en `POST /api/users/register` y `<SECRET_KEY>` por el valor de `SECRET_KEY` definido en tu `.env`.
+
+3. En Swagger (`/docs`) usar **Authorize** y pegar: `Bearer <TOKEN>`.
+4. Ejecutar `GET /api/wallet/{address}` con la `wallet_address` del mismo usuario.
+
+Notas:
+- Si no envías token, el endpoint responde `401 Not authenticated`.
+- Si el `user_id` del token no coincide con el dueño de la wallet, responde `401 Unauthorized`.
+
 ---
 *Desarrollado por el Equipo A/1*

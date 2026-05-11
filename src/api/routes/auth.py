@@ -8,8 +8,8 @@ from src.models.api_response import (
     LoginResponseData,
     RegisterUserResponseData
 )
-from src.models.user import UserRegister, LoginRequest
-from src.services.user_service import register_user_with_wallet, authenticate_user
+from src.models.user import UserRegister, LoginRequest, ResetPasswordRequest
+from src.services.user_service import register_user_with_wallet, authenticate_user, reset_user_password
 from src.services.token_service import generate_token
 
 
@@ -140,3 +140,89 @@ async def login(payload: LoginRequest, db=Depends(get_database)):
 )
 async def register(payload: UserRegister, db=Depends(get_database)):
     return await register_user_with_wallet(payload=payload, db=db)
+
+
+@router.post(
+    "/api/users/reset-password",
+    status_code=status.HTTP_200_OK,
+    summary="Restablecer contrasena",
+    description=(
+        "Valida token JWT con firma dinamica (SECRET_KEY + hash actual). "
+        "Si es valido, actualiza la contrasena hasheada en MongoDB."
+    ),
+    operation_id="resetPassword",
+    response_model=ApiSuccessResponse[dict],
+    responses={
+        200: {
+            "model": ApiSuccessResponse[dict],
+            "description": "Contrasena restablecida correctamente.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Contrasena restablecida correctamente.",
+                        "data": {},
+                        "error": {"code": "", "details": ""},
+                    }
+                }
+            },
+        },
+        400: {
+            "model": ApiErrorResponse,
+            "description": "Error de validacion del body.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Datos invalidos o contrasena debil.",
+                        "data": {},
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "details": "new_password es obligatorio y debe tener al menos 8 caracteres.",
+                        },
+                    }
+                }
+            },
+        },
+        401: {
+            "model": ApiErrorResponse,
+            "description": "Token invalido, expirado o firma no coincide.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Token de recuperacion invalido o expirado.",
+                        "data": {},
+                        "error": {
+                            "code": "INVALID_OR_EXPIRED_TOKEN",
+                            "details": "El token no es valido, expiro o ya fue invalidado por cambio de contrasena.",
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "model": ApiErrorResponse,
+            "description": "Error interno o de base de datos.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible restablecer la contrasena.",
+                        "data": {},
+                        "error": {
+                            "code": "DATABASE_ERROR",
+                            "details": "Error interno al actualizar la contrasena del usuario en la base de datos.",
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def reset_password(payload: ResetPasswordRequest, db=Depends(get_database)):
+    return await reset_user_password(
+        token=payload.token,
+        new_password=payload.new_password,
+        db=db,
+    )

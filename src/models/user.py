@@ -29,3 +29,15 @@ class LoginRequest(BaseModel):
 
     email: EmailStr = Field(..., description="Email del usuario.")
     password: str = Field(..., description="Contraseña del usuario.")
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(..., description="JWT de recuperacion.")
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        description="Nueva contrasena del usuario.",
+        examples=["Segura123!"],
+    )

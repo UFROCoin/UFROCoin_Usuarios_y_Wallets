@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
+import jwt
+from bson import ObjectId
 from fastapi import HTTPException, status
+from jwt import InvalidTokenError
 from pymongo.errors import PyMongoError
 
 from src.core.config import settings
@@ -12,6 +15,17 @@ from src.models.user import UserRegister
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
 from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
+
+
+def _invalid_recovery_token_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={
+            "message": "Token de recuperacion invalido o expirado.",
+            "code": "INVALID_OR_EXPIRED_TOKEN",
+            "details": "El token no es valido, expiro o ya fue invalidado por cambio de contrasena.",
+        },
+    )
 
 
 async def authenticate_user(email: str, password: str, db):
@@ -124,5 +138,72 @@ async def register_user_with_wallet(payload: UserRegister, db):
         success=True,
         message="Usuario registrado correctamente.",
         data=response_data,
+        error={"code": "", "details": ""},
+    ).model_dump()
+
+
+async def reset_user_password(token: str, new_password: str, db):
+    users_collection = db["users"]
+
+    try:
+        unverified_payload = jwt.decode(token, options={"verify_signature": False})
+        user_id = unverified_payload.get("user_id")
+    except InvalidTokenError as exc:
+        raise _invalid_recovery_token_error() from exc
+
+    if not user_id:
+        raise _invalid_recovery_token_error()
+
+    user = None
+    if ObjectId.is_valid(user_id):
+        user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if user is None:
+        user = await users_collection.find_one({"_id": user_id})
+
+    if not user or not user.get("password_hash"):
+        raise _invalid_recovery_token_error()
+
+    try:
+        verified_payload = jwt.decode(
+            token,
+            settings.secret_key + user["password_hash"],
+            algorithms=[settings.jwt_algorithm],
+        )
+    except InvalidTokenError as exc:
+        raise _invalid_recovery_token_error() from exc
+
+    if verified_payload.get("user_id") != user_id:
+        raise _invalid_recovery_token_error()
+
+    password_hash_result = hash_contrasena(new_password)
+    if password_hash_result["status"] != "ok":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Datos invalidos o contrasena debil.",
+                "code": "VALIDATION_ERROR",
+                "details": "new_password es obligatorio y debe tener al menos 8 caracteres.",
+            },
+        )
+
+    try:
+        await users_collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"password_hash": password_hash_result["data"]["hash"]}},
+        )
+    except PyMongoError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "No fue posible restablecer la contrasena.",
+                "code": "DATABASE_ERROR",
+                "details": "Error interno al actualizar la contrasena del usuario en la base de datos.",
+            },
+        ) from exc
+
+    return ApiSuccessResponse(
+        success=True,
+        message="Contrasena restablecida correctamente.",
+        data={},
         error={"code": "", "details": ""},
     ).model_dump()

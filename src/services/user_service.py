@@ -1,20 +1,25 @@
 from datetime import datetime, timezone
-
+from typing import Any
 import jwt
 from bson import ObjectId
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
-
 from src.core.config import settings
 from src.models.api_response import (
-    ApiSuccessResponse, 
-    RegisterUserResponseData
+    ApiSuccessResponse,
+    RegisterUserResponseData,
 )
 from src.models.user import UserRegister
+from src.services.notification_service import (
+    ConsoleNotificationService,
+    INotificationService,
+)
+from src.services.token_service import generate_password_recovery_token
+from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
-from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
 
 
 def _invalid_recovery_token_error() -> HTTPException:
@@ -45,6 +50,35 @@ async def authenticate_user(email: str, password: str, db):
         
     return False
 
+"""
+el link de recuperacion se encuentra de momento en los logs del contenedor ufrocoin-api-a (si es que el modulo 4 quiere implementarlo)
+cuando se implementen servicios de notificacion reales, se enviara por email u otro canal al usuario correspondiente.
+"""
+async def request_password_recovery(
+    email: str,
+    db: AsyncIOMotorDatabase,
+    notification_service: INotificationService | None = None,
+) -> dict[str, Any]:
+    """
+    Caso de uso US-13:
+    - Siempre responde HTTP 200 con mensaje generico (anti enumeracion).
+    - Si el usuario existe, genera token JWT con firma dinamica
+      SECRET_KEY + password_hash_actual.
+    - El token nunca se retorna en JSON; se notifica por el servicio inyectado.
+    """
+    users_collection = db["users"]
+    user = await users_collection.find_one({"email": email})
+    if not user:
+        return _forgot_password_response()
+    password_hash = user.get("password_hash")
+    user_email = user.get("email")
+    if not password_hash or user_email is None:
+        return _forgot_password_response()
+    token = generate_password_recovery_token(user_email, password_hash)
+    reset_link = f"http://localhost:5173/reset-password?token={token}"
+    service = notification_service or ConsoleNotificationService()
+    await service.send_password_reset_link(email=email, reset_link=reset_link)
+    return _forgot_password_response()
 
 async def register_user_with_wallet(payload: UserRegister, db):
     users_collection = db["users"]
@@ -141,6 +175,13 @@ async def register_user_with_wallet(payload: UserRegister, db):
         error={"code": "", "details": ""},
     ).model_dump()
 
+def _forgot_password_response() -> dict[str, Any]:
+    return {
+        "success": True,
+        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+        "data": {},
+        "error": None,
+    }
 
 async def reset_user_password(token: str, new_password: str, db):
     users_collection = db["users"]
@@ -207,3 +248,4 @@ async def reset_user_password(token: str, new_password: str, db):
         data={},
         error={"code": "", "details": ""},
     ).model_dump()
+

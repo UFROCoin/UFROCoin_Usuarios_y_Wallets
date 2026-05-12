@@ -30,6 +30,13 @@ class LoginRequest(BaseModel):
     email: EmailStr = Field(..., description="Email del usuario.")
     password: str = Field(..., description="Contraseña del usuario.")
 
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr = Field(
+        ...,
+        description="Correo electronico para solicitar recuperacion de contrasena.",
+        examples=["ana.perez@ufrontera.cl"],
+    )
 
 class ResetPasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

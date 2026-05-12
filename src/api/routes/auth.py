@@ -1,16 +1,27 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
-
+from fastapi.responses import JSONResponse
 from src.core.config import settings
 from src.core.database import get_database
 from src.models.api_response import (
-    ApiErrorResponse, 
-    ApiSuccessResponse, 
+    ApiErrorResponse,
+    ApiSuccessResponse,
     LoginResponseData,
-    RegisterUserResponseData
+    RegisterUserResponseData,
 )
-from src.models.user import UserRegister, LoginRequest, ResetPasswordRequest
-from src.services.user_service import register_user_with_wallet, authenticate_user, reset_user_password
+from src.models.user import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    UserRegister,
+)
 from src.services.token_service import generate_token
+from src.services.user_service import (
+    authenticate_user,
+    register_user_with_wallet,
+    request_password_recovery,
+    reset_user_password,
+)
 
 
 router = APIRouter(tags=["Auth"])
@@ -140,6 +151,37 @@ async def login(payload: LoginRequest, db=Depends(get_database)):
 )
 async def register(payload: UserRegister, db=Depends(get_database)):
     return await register_user_with_wallet(payload=payload, db=db)
+
+@router.post(
+    "/api/users/forgot-password",
+    status_code=status.HTTP_200_OK,
+    summary="Solicitar recuperacion de contrasena",
+    description=(
+        "Solicita recuperacion de contrasena sin revelar si el email existe. "
+        "Si existe, genera token JWT con firma dinamica (SECRET_KEY + password_hash actual) "
+        "y notifica el enlace por el servicio de notificaciones."
+    ),
+    operation_id="forgotPassword",
+    response_model=ApiSuccessResponse[dict[str, Any]],
+    responses={
+        200: {
+            "description": "Respuesta generica anti-enumeracion.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+                        "data": {},
+                        "error": None,
+                    }
+                }
+            },
+        }
+    },
+)
+async def forgot_password(payload: ForgotPasswordRequest, db=Depends(get_database)):
+    result = await request_password_recovery(email=payload.email, db=db)
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result)
 
 
 @router.post(

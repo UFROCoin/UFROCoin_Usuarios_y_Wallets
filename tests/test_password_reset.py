@@ -97,6 +97,8 @@ async def test_us14_recovery_token_is_single_use():
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "INVALID_OR_EXPIRED_TOKEN"
+    assert verificar_contrasena("nueva123", db["users"].docs[0]["password_hash"])["data"]["valid"] is True
+    assert verificar_contrasena("otra1234", db["users"].docs[0]["password_hash"])["data"]["valid"] is False
 
 
 @pytest.mark.asyncio
@@ -129,6 +131,8 @@ async def test_us14_expired_token_returns_401():
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "INVALID_OR_EXPIRED_TOKEN"
+    assert db["users"].docs[0]["password_hash"] == current_hash
+    assert verificar_contrasena("actual123", db["users"].docs[0]["password_hash"])["data"]["valid"] is True
 
 
 def test_us14_model_validates_new_password_length():

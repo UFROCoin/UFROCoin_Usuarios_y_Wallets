@@ -165,6 +165,7 @@ async def register(payload: UserRegister, db=Depends(get_database)):
     response_model=ApiSuccessResponse[dict[str, Any]],
     responses={
         200: {
+            "model": ApiSuccessResponse[dict[str, Any]],
             "description": "Respuesta generica anti-enumeracion.",
             "content": {
                 "application/json": {
@@ -172,11 +173,45 @@ async def register(payload: UserRegister, db=Depends(get_database)):
                         "success": True,
                         "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
                         "data": {},
-                        "error": None,
+                        "error": {"code": "", "details": ""},
                     }
                 }
             },
-        }
+        },
+        422: {
+            "model": ApiErrorResponse,
+            "description": "Error de validacion del body.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Datos invalidos o contrasena debil.",
+                        "data": {},
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "details": "email debe tener formato valido.",
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "model": ApiErrorResponse,
+            "description": "Error interno o de base de datos.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible procesar la solicitud de recuperacion.",
+                        "data": {},
+                        "error": {
+                            "code": "DATABASE_ERROR",
+                            "details": "Error interno al consultar el usuario o notificar el enlace de recuperacion.",
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 async def forgot_password(payload: ForgotPasswordRequest, db=Depends(get_database)):
@@ -209,7 +244,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db=Depends(get_databas
                 }
             },
         },
-        400: {
+        422: {
             "model": ApiErrorResponse,
             "description": "Error de validacion del body.",
             "content": {

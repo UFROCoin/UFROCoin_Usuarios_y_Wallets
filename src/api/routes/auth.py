@@ -178,7 +178,7 @@ async def register(payload: UserRegister, db=Depends(get_database)):
                 }
             },
         },
-        422: {
+        400: {
             "model": ApiErrorResponse,
             "description": "Error de validacion del body.",
             "content": {
@@ -244,7 +244,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db=Depends(get_databas
                 }
             },
         },
-        422: {
+        400: {
             "model": ApiErrorResponse,
             "description": "Error de validacion del body.",
             "content": {

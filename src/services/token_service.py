@@ -14,7 +14,7 @@ def generate_token(user_id: str, wallet_address: str) -> str:
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
-def generate_password_recovery_token(user_email: str, password_hash: str) -> str:
+def generate_password_recovery_token(user_id: str, password_hash: str) -> str:
     """
     Genera un JWT de recuperacion firmado con clave dinamica:
     SECRET_KEY + password_hash_actual.
@@ -23,7 +23,7 @@ def generate_password_recovery_token(user_email: str, password_hash: str) -> str
     """
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
     payload = {
-        "user_email": user_email,
+        "user_id": user_id,
         "exp": expires_at,
     }
     dynamic_secret = settings.secret_key + password_hash

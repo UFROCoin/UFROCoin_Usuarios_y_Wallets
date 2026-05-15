@@ -14,7 +14,7 @@ def test_forgot_password_openapi_documents_standard_responses():
         "data": {},
         "error": {"code": "", "details": ""},
     }
-    assert responses["422"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
+    assert responses["400"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
     assert responses["500"]["content"]["application/json"]["example"]["error"]["code"] == "DATABASE_ERROR"
 
 
@@ -25,6 +25,6 @@ def test_reset_password_openapi_documents_error_codes():
         "code": "",
         "details": "",
     }
-    assert responses["422"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
+    assert responses["400"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
     assert responses["401"]["content"]["application/json"]["example"]["error"]["code"] == "INVALID_OR_EXPIRED_TOKEN"
     assert responses["500"]["content"]["application/json"]["example"]["error"]["code"] == "DATABASE_ERROR"

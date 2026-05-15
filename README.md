@@ -60,5 +60,51 @@ Notas:
 - Si no envías token, el endpoint responde `401 Not authenticated`.
 - Si el `user_id` del token no coincide con el dueño de la wallet, responde `401 Unauthorized`.
 
+### 🔁 Probar recuperacion de contrasena US-13/US-14 (Docker + Swagger)
+1. Levantar API + MongoDB:
+```bash
+docker compose up --build
+```
+
+2. Abrir Swagger en `http://localhost:8001/docs`.
+
+3. Registrar un usuario con `POST /api/users/register` si aun no existe:
+```json
+{
+  "nombre": "Ana Perez",
+  "email": "ana.perez@ufrontera.cl",
+  "password": "Segura123!"
+}
+```
+
+4. Solicitar recuperacion con `POST /api/users/forgot-password`:
+```json
+{
+  "email": "ana.perez@ufrontera.cl"
+}
+```
+
+La respuesta no incluye el token; siempre retorna un mensaje generico para evitar enumeracion de usuarios.
+
+5. En otra terminal, revisar el link simulado en logs:
+```bash
+docker compose logs -f api
+```
+
+Buscar una linea como:
+```text
+[PasswordRecovery] email=ana.perez@ufrontera.cl reset_link=http://localhost:5173/reset-password?token=<TOKEN>
+```
+
+6. Copiar solo el valor de `<TOKEN>` (sin los < >) y usarlo en `POST /api/users/reset-password`(sin los < >!!!!!!!!):
+```json
+{
+  "token": "<TOKEN>",
+  "new_password": "Nueva123!"
+}
+```
+
+7. Verificar que responde `200 OK` y luego iniciar sesion con la nueva contrasena. El token es de un solo uso; reutilizarlo debe responder `401 INVALID_OR_EXPIRED_TOKEN`.
+
 ---
 *Desarrollado por el Equipo A/1*

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 import pytest
@@ -8,7 +9,7 @@ from pymongo.errors import PyMongoError
 
 from src.core.config import settings
 from src.models.user import ResetPasswordRequest
-from src.services.user_service import reset_user_password
+from src.services.user_service import request_password_recovery, reset_user_password
 from src.utils.security import hash_contrasena, verificar_contrasena
 
 
@@ -48,6 +49,14 @@ class FakeDB:
         return self.collections[key]
 
 
+class FakeNotificationService:
+    def __init__(self):
+        self.reset_link = None
+
+    async def send_password_reset_link(self, email: str, reset_link: str) -> None:
+        self.reset_link = reset_link
+
+
 def make_password_hash(password="actual123"):
     return hash_contrasena(password)["data"]["hash"]
 
@@ -80,6 +89,32 @@ async def test_us14_reset_password_success_updates_hash():
     assert response["data"] == {}
     assert response["error"] == {"code": "", "details": ""}
     assert db["users"].docs[0]["password_hash"] != current_hash
+    assert verificar_contrasena("nueva123", db["users"].docs[0]["password_hash"])["data"]["valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_us13_generated_token_can_be_used_by_us14_reset_password():
+    db = FakeDB()
+    notification_service = FakeNotificationService()
+    current_hash = make_password_hash()
+    db["users"].docs.append({"_id": "id_1", "email": "ana@ufro.cl", "password_hash": current_hash})
+
+    response = await request_password_recovery(
+        email="ana@ufro.cl",
+        db=db,
+        notification_service=notification_service,
+    )
+    token = parse_qs(urlparse(notification_service.reset_link).query)["token"][0]
+
+    reset_response = await reset_user_password(token=token, new_password="nueva123", db=db)
+
+    assert response == {
+        "success": True,
+        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+        "data": {},
+        "error": {"code": "", "details": ""},
+    }
+    assert reset_response["success"] is True
     assert verificar_contrasena("nueva123", db["users"].docs[0]["password_hash"])["data"]["valid"] is True
 
 

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
 import jwt
 from bson import ObjectId
 from fastapi import HTTPException, status
@@ -13,8 +14,8 @@ from src.models.api_response import (
 )
 from src.models.user import UserRegister
 from src.services.notification_service import (
-    ConsoleNotificationService,
     INotificationService,
+    get_default_notification_service,
 )
 from src.services.token_service import generate_password_recovery_token
 from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
@@ -50,10 +51,6 @@ async def authenticate_user(email: str, password: str, db):
         
     return False
 
-"""
-el link de recuperacion se encuentra de momento en los logs del contenedor ufrocoin-api-a (si es que el modulo 4 quiere implementarlo)
-cuando se implementen servicios de notificacion reales, se enviara por email u otro canal al usuario correspondiente.
-"""
 async def request_password_recovery(
     email: str,
     db: AsyncIOMotorDatabase,
@@ -75,8 +72,9 @@ async def request_password_recovery(
     if not password_hash or user_id is None:
         return _forgot_password_response()
     token = generate_password_recovery_token(str(user_id), password_hash)
-    reset_link = f"http://localhost:5173/reset-password?token={token}"
-    service = notification_service or ConsoleNotificationService()
+    query = urlencode({"token": token})
+    reset_link = f"{settings.password_reset_base_url}?{query}"
+    service = notification_service or get_default_notification_service()
     await service.send_password_reset_link(email=email, reset_link=reset_link)
     return _forgot_password_response()
 

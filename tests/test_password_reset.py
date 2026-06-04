@@ -9,6 +9,7 @@ from pymongo.errors import PyMongoError
 
 from src.core.config import settings
 from src.models.user import ResetPasswordRequest
+from src.services.notification_service import NotificationService
 from src.services.user_service import request_password_recovery, reset_user_password
 from src.utils.security import hash_contrasena, verificar_contrasena
 
@@ -188,3 +189,43 @@ async def test_us14_database_error_returns_500():
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail["code"] == "DATABASE_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_resend_notification_service_sends_email_with_resend(monkeypatch):
+    captured_payload = {}
+
+    def fake_send(payload):
+        captured_payload.update(payload)
+        return {"id": "mail_123"}
+
+    monkeypatch.setattr(settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(settings, "resend_from_email", "UFROCoin <no-reply@ufrocoin.email>")
+    monkeypatch.setattr(settings, "resend_reset_subject", "Reset test")
+    monkeypatch.setattr("resend.Emails.send", fake_send)
+
+    service = NotificationService()
+    await service.send_password_reset_link(
+        email="ana@ufro.cl",
+        reset_link="http://localhost:5173/reset-password?token=abc",
+    )
+
+    assert captured_payload["from"] == "UFROCoin <no-reply@ufrocoin.email>"
+    assert captured_payload["to"] == "ana@ufro.cl"
+    assert captured_payload["subject"] == "Reset test"
+    assert "http://localhost:5173/reset-password?token=abc" in captured_payload["html"]
+
+
+@pytest.mark.asyncio
+async def test_resend_notification_service_skips_without_api_key(monkeypatch):
+    def fail_if_called(_):
+        raise AssertionError("resend.Emails.send no debe llamarse")
+
+    monkeypatch.setattr(settings, "resend_api_key", "")
+    monkeypatch.setattr("resend.Emails.send", fail_if_called)
+
+    service = NotificationService()
+    await service.send_password_reset_link(
+        email="ana@ufro.cl",
+        reset_link="http://localhost:5173/reset-password?token=abc",
+    )

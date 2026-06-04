@@ -42,10 +42,10 @@
 
 ## Sprint 5
 
-* Product Owner: Daniel Opazo
+* Product Owner: John Fernandez
 * Scrum Master: Julio Contreras
 * Dev: Joaquín Aravena (Integrador)
-* Dev: John Fernandez
+* Dev: Daniel Opazo
 * Dev: Orlando Caullan
 
 ## Sprint 6

@@ -86,17 +86,18 @@ docker compose up --build
 
 La respuesta no incluye el token; siempre retorna un mensaje generico para evitar enumeracion de usuarios.
 
-5. En otra terminal, revisar el link simulado en logs:
+5. Revisar la bandeja de entrada del correo registrado y abrir el enlace recibido.
+
+6. Para ambiente local puedes configurar en `.env`:
 ```bash
-docker compose logs -f api
+RESEND_API_KEY=<tu_api_key_real>
+RESEND_FROM_EMAIL="UFROCoin <no-reply@ufrocoin.email>"
+PASSWORD_RESET_BASE_URL=http://localhost:5173/reset-password
 ```
 
-Buscar una linea como:
-```text
-[PasswordRecovery] email=ana.perez@ufrontera.cl reset_link=http://localhost:5173/reset-password?token=<TOKEN>
-```
+En ambientes desplegados, ajustar `PASSWORD_RESET_BASE_URL` al frontend real.
 
-6. Copiar solo el valor de `<TOKEN>` (sin los < >) y usarlo en `POST /api/users/reset-password`(sin los < >!!!!!!!!):
+7. Si necesitas probar manualmente `POST /api/users/reset-password`, usa el `token` del enlace recibido:
 ```json
 {
   "token": "<TOKEN>",
@@ -104,7 +105,7 @@ Buscar una linea como:
 }
 ```
 
-7. Verificar que responde `200 OK` y luego iniciar sesion con la nueva contrasena. El token es de un solo uso; reutilizarlo debe responder `401 INVALID_OR_EXPIRED_TOKEN`.
+8. Verificar que responde `200 OK` y luego iniciar sesion con la nueva contrasena. El token es de un solo uso; reutilizarlo debe responder `401 INVALID_OR_EXPIRED_TOKEN`.
 
 ---
 *Desarrollado por el Equipo A/1*

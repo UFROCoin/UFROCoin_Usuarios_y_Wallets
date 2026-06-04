@@ -197,16 +197,16 @@ async def register(payload: UserRegister, db=Depends(get_database)):
         },
         500: {
             "model": ApiErrorResponse,
-            "description": "Error interno o de base de datos.",
+            "description": "Error interno al enviar correo de recuperacion.",
             "content": {
                 "application/json": {
                     "example": {
                         "success": False,
-                        "message": "No fue posible procesar la solicitud de recuperacion.",
+                        "message": "No fue posible enviar el correo de recuperacion.",
                         "data": {},
                         "error": {
-                            "code": "DATABASE_ERROR",
-                            "details": "Error interno al consultar el usuario o notificar el enlace de recuperacion.",
+                            "code": "EMAIL_DELIVERY_ERROR",
+                            "details": "Error interno al enviar el enlace de recuperacion.",
                         },
                     }
                 }

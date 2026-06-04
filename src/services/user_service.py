@@ -15,6 +15,9 @@ from src.models.api_response import (
 from src.models.user import UserRegister
 from src.services.notification_service import (
     INotificationService,
+    NotificationDeliveryError,
+    NotificationProviderNotConfiguredError,
+    NotificationTimeoutError,
     get_default_notification_service,
 )
 from src.services.token_service import generate_password_recovery_token
@@ -75,7 +78,35 @@ async def request_password_recovery(
     query = urlencode({"token": token})
     reset_link = f"{settings.password_reset_base_url}?{query}"
     service = notification_service or get_default_notification_service()
-    await service.send_password_reset_link(email=email, reset_link=reset_link)
+    try:
+        await service.send_password_reset_link(email=email, reset_link=reset_link)
+    except NotificationTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "No fue posible enviar el correo de recuperacion.",
+                "code": "EMAIL_DELIVERY_TIMEOUT",
+                "details": "El proveedor de correo no respondio dentro del tiempo esperado.",
+            },
+        ) from exc
+    except NotificationProviderNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "No fue posible enviar el correo de recuperacion.",
+                "code": "EMAIL_PROVIDER_NOT_CONFIGURED",
+                "details": "El proveedor de correo no se encuentra configurado correctamente.",
+            },
+        ) from exc
+    except NotificationDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "No fue posible enviar el correo de recuperacion.",
+                "code": "EMAIL_DELIVERY_ERROR",
+                "details": "Error interno al enviar el enlace de recuperacion.",
+            },
+        ) from exc
     return _forgot_password_response()
 
 async def register_user_with_wallet(payload: UserRegister, db):

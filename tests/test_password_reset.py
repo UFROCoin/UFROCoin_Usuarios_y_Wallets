@@ -9,7 +9,12 @@ from pymongo.errors import PyMongoError
 
 from src.core.config import settings
 from src.models.user import ResetPasswordRequest
-from src.services.notification_service import NotificationService
+from src.services.notification_service import (
+    NotificationProviderError,
+    NotificationProviderNotConfiguredError,
+    NotificationService,
+    NotificationTimeoutError,
+)
 from src.services.user_service import request_password_recovery, reset_user_password
 from src.utils.security import hash_contrasena, verificar_contrasena
 
@@ -56,6 +61,14 @@ class FakeNotificationService:
 
     async def send_password_reset_link(self, email: str, reset_link: str) -> None:
         self.reset_link = reset_link
+
+
+class FakeFailingNotificationService:
+    def __init__(self, error: Exception):
+        self.error = error
+
+    async def send_password_reset_link(self, email: str, reset_link: str) -> None:
+        raise self.error
 
 
 def make_password_hash(password="actual123"):
@@ -117,6 +130,57 @@ async def test_us13_generated_token_can_be_used_by_us14_reset_password():
     }
     assert reset_response["success"] is True
     assert verificar_contrasena("nueva123", db["users"].docs[0]["password_hash"])["data"]["valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_password_recovery_returns_500_when_notification_provider_fails():
+    db = FakeDB()
+    db["users"].docs.append({"_id": "id_1", "email": "ana@ufro.cl", "password_hash": make_password_hash()})
+    notification_service = FakeFailingNotificationService(NotificationProviderError())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await request_password_recovery(
+            email="ana@ufro.cl",
+            db=db,
+            notification_service=notification_service,
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail["code"] == "EMAIL_DELIVERY_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_password_recovery_returns_500_when_notification_timeout():
+    db = FakeDB()
+    db["users"].docs.append({"_id": "id_1", "email": "ana@ufro.cl", "password_hash": make_password_hash()})
+    notification_service = FakeFailingNotificationService(NotificationTimeoutError())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await request_password_recovery(
+            email="ana@ufro.cl",
+            db=db,
+            notification_service=notification_service,
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail["code"] == "EMAIL_DELIVERY_TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_password_recovery_returns_500_when_notification_provider_not_configured():
+    db = FakeDB()
+    db["users"].docs.append({"_id": "id_1", "email": "ana@ufro.cl", "password_hash": make_password_hash()})
+    notification_service = FakeFailingNotificationService(NotificationProviderNotConfiguredError())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await request_password_recovery(
+            email="ana@ufro.cl",
+            db=db,
+            notification_service=notification_service,
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail["code"] == "EMAIL_PROVIDER_NOT_CONFIGURED"
 
 
 @pytest.mark.asyncio
@@ -202,6 +266,7 @@ async def test_resend_notification_service_sends_email_with_resend(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "re_test")
     monkeypatch.setattr(settings, "resend_from_email", "UFROCoin <no-reply@ufrocoin.email>")
     monkeypatch.setattr(settings, "resend_reset_subject", "Reset test")
+    monkeypatch.setattr(settings, "resend_timeout_seconds", 1.0)
     monkeypatch.setattr("resend.Emails.send", fake_send)
 
     service = NotificationService()
@@ -218,14 +283,32 @@ async def test_resend_notification_service_sends_email_with_resend(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resend_notification_service_skips_without_api_key(monkeypatch):
-    def fail_if_called(_):
-        raise AssertionError("resend.Emails.send no debe llamarse")
-
     monkeypatch.setattr(settings, "resend_api_key", "")
-    monkeypatch.setattr("resend.Emails.send", fail_if_called)
 
     service = NotificationService()
-    await service.send_password_reset_link(
-        email="ana@ufro.cl",
-        reset_link="http://localhost:5173/reset-password?token=abc",
-    )
+    with pytest.raises(NotificationProviderNotConfiguredError):
+        await service.send_password_reset_link(
+            email="ana@ufro.cl",
+            reset_link="http://localhost:5173/reset-password?token=abc",
+        )
+
+
+@pytest.mark.asyncio
+async def test_resend_notification_service_raises_timeout_error(monkeypatch):
+    import asyncio
+
+    async def fake_wait_for(awaitable, timeout):
+        if hasattr(awaitable, "close"):
+            awaitable.close()
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(settings, "resend_timeout_seconds", 0.01)
+    monkeypatch.setattr("src.services.notification_service.asyncio.wait_for", fake_wait_for)
+
+    service = NotificationService()
+    with pytest.raises(NotificationTimeoutError):
+        await service.send_password_reset_link(
+            email="ana@ufro.cl",
+            reset_link="http://localhost:5173/reset-password?token=abc",
+        )

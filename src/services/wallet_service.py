@@ -3,25 +3,43 @@ from fastapi import HTTPException, status
 
 async def calcular_saldo_real(wallet_address: str, db: AsyncIOMotorDatabase) -> float:
     """
-    Calcula el saldo real de una wallet agregando ingresos y egresos.
+    Calcula el saldo disponible sumando transacciones de entrada y restando las de salida.
+    Cumple con los criterios de aceptación usando una sola consulta de agregación.
+    Solo considera transacciones con estado 'CONFIRMED' para ignorar el mempool (PENDING).
     """
-    pipeline_ingresos = [
-        {"$match": {"hacia": wallet_address, "estado": "CONFIRMED"}},
-        {"$group": {"_id": None, "total": {"$sum": "$monto"}}}
+    pipeline = [
+        {
+            "$match": {
+                "$or": [{"desde": wallet_address}, {"hacia": wallet_address}],
+                "estado": "CONFIRMED"
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total_ingresos": {
+                    "$sum": {"$cond": [{"$eq": ["$hacia", wallet_address]}, "$monto", 0]}
+                },
+                "total_egresos": {
+                    "$sum": {"$cond": [{"$eq": ["$desde", wallet_address]}, "$monto", 0]}
+                }
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "saldo_disponible": {"$subtract": ["$total_ingresos", "$total_egresos"]}
+            }
+        }
     ]
-    
-    pipeline_egresos = [
-        {"$match": {"desde": wallet_address, "estado": "CONFIRMED"}},
-        {"$group": {"_id": None, "total": {"$sum": "$monto"}}}
-    ]
 
-    ingresos_res = await db["transacciones"].aggregate(pipeline_ingresos).to_list(1)
-    egresos_res = await db["transacciones"].aggregate(pipeline_egresos).to_list(1)
+    cursor = db["transacciones"].aggregate(pipeline)
+    resultado = await cursor.to_list(length=1)
 
-    total_ingresos = ingresos_res[0]["total"] if ingresos_res else 0.0
-    total_egresos = egresos_res[0]["total"] if egresos_res else 0.0
+    if not resultado:
+        return 0.0
 
-    return float(total_ingresos - total_egresos)
+    return float(resultado[0]["saldo_disponible"])
 
 
 async def obtener_transacciones_recientes(wallet_address: str, db: AsyncIOMotorDatabase, limite: int = 5):
@@ -55,7 +73,6 @@ async def obtener_detalle_wallet(address: str, db: AsyncIOMotorDatabase):
 
     saldo_actual = await calcular_saldo_real(address, db)
 
-    
     return {
         "address": wallet["address"],
         "owner_id": str(wallet["user_id"]),

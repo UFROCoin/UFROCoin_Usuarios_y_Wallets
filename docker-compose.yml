@@ -42,6 +42,11 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-UFROCoin <no-reply@ufrocoin.email>}
+      RESEND_RESET_SUBJECT: ${RESEND_RESET_SUBJECT:-Recuperacion de contrasena UFROCoin}
+      PASSWORD_RESET_BASE_URL: ${PASSWORD_RESET_BASE_URL:-http://localhost:5173/reset-password}
+      RESEND_TIMEOUT_SECONDS: ${RESEND_TIMEOUT_SECONDS:-10}
     ports:
       - "8001:8001"
 

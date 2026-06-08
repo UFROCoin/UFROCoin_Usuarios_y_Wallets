@@ -58,8 +58,10 @@ class FakeDB:
 class FakeNotificationService:
     def __init__(self):
         self.reset_link = None
+        self.calls = 0
 
     async def send_password_reset_link(self, email: str, reset_link: str) -> None:
+        self.calls += 1
         self.reset_link = reset_link
 
 
@@ -87,6 +89,45 @@ def make_recovery_token(user_id, password_hash, expires_delta=timedelta(hours=1)
 def configure_settings(monkeypatch):
     monkeypatch.setattr(settings, "secret_key", "test-secret")
     monkeypatch.setattr(settings, "jwt_algorithm", "HS256")
+
+
+@pytest.mark.asyncio
+async def test_us13_unknown_email_keeps_generic_response_and_does_not_send_email():
+    db = FakeDB()
+    notification_service = FakeNotificationService()
+
+    response = await request_password_recovery(
+        email="desconocida@ufro.cl",
+        db=db,
+        notification_service=notification_service,
+    )
+
+    assert response == {
+        "success": True,
+        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+        "data": {},
+        "error": {"code": "", "details": ""},
+    }
+    assert notification_service.calls == 0
+    assert "token" not in response
+
+
+@pytest.mark.asyncio
+async def test_us13_user_without_password_hash_keeps_generic_response_and_does_not_send_email():
+    db = FakeDB()
+    notification_service = FakeNotificationService()
+    db["users"].docs.append({"_id": "id_1", "email": "ana@ufro.cl"})
+
+    response = await request_password_recovery(
+        email="ana@ufro.cl",
+        db=db,
+        notification_service=notification_service,
+    )
+
+    assert response["success"] is True
+    assert response["data"] == {}
+    assert response["error"] == {"code": "", "details": ""}
+    assert notification_service.calls == 0
 
 
 @pytest.mark.asyncio
@@ -294,7 +335,7 @@ async def test_resend_notification_service_skips_without_api_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resend_notification_service_raises_timeout_error(monkeypatch):
+async def test_resend_notification_service_raises_timeout_error_without_leaking_api_key(monkeypatch, caplog):
     import asyncio
 
     async def fake_wait_for(awaitable, timeout):
@@ -302,13 +343,38 @@ async def test_resend_notification_service_raises_timeout_error(monkeypatch):
             awaitable.close()
         raise asyncio.TimeoutError()
 
-    monkeypatch.setattr(settings, "resend_api_key", "re_test")
+    secret_api_key = "re_secret_should_not_leak"
+    monkeypatch.setattr(settings, "resend_api_key", secret_api_key)
     monkeypatch.setattr(settings, "resend_timeout_seconds", 0.01)
     monkeypatch.setattr("src.services.notification_service.asyncio.wait_for", fake_wait_for)
 
     service = NotificationService()
-    with pytest.raises(NotificationTimeoutError):
-        await service.send_password_reset_link(
-            email="ana@ufro.cl",
-            reset_link="http://localhost:5173/reset-password?token=abc",
-        )
+    with caplog.at_level("ERROR", logger="src.services.notification_service"):
+        with pytest.raises(NotificationTimeoutError):
+            await service.send_password_reset_link(
+                email="ana@ufro.cl",
+                reset_link="http://localhost:5173/reset-password?token=abc",
+            )
+
+    assert secret_api_key not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_resend_notification_service_raises_provider_error_without_leaking_api_key(monkeypatch, caplog):
+    def fake_send(payload):
+        raise RuntimeError("provider failed")
+
+    secret_api_key = "re_secret_should_not_leak"
+    monkeypatch.setattr(settings, "resend_api_key", secret_api_key)
+    monkeypatch.setattr(settings, "resend_timeout_seconds", 1.0)
+    monkeypatch.setattr("resend.Emails.send", fake_send)
+
+    service = NotificationService()
+    with caplog.at_level("ERROR", logger="src.services.notification_service"):
+        with pytest.raises(NotificationProviderError):
+            await service.send_password_reset_link(
+                email="ana@ufro.cl",
+                reset_link="http://localhost:5173/reset-password?token=abc",
+            )
+
+    assert secret_api_key not in caplog.text

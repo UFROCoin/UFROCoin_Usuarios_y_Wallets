@@ -19,12 +19,58 @@ class FakeTransactionsCollection:
     def __init__(self, docs):
         self.docs = docs
 
+    def _matches(self, doc, match):
+        for key, value in match.items():
+            if key == "$or":
+                if not any(self._matches(doc, condition) for condition in value):
+                    return False
+                continue
+
+            if doc.get(key) != value:
+                return False
+
+        return True
+
+    def _extract_wallet_address(self, match):
+        or_conditions = match.get("$or", [])
+        for condition in or_conditions:
+            if "desde" in condition:
+                return condition["desde"]
+            if "hacia" in condition:
+                return condition["hacia"]
+        return None
+
     def aggregate(self, pipeline):
-        match = pipeline[0]["$match"]
-        total = 0.0
-        for doc in self.docs:
-            if all(doc.get(key) == value for key, value in match.items()):
-                total += doc.get("monto", 0.0)
+        match = pipeline[0].get("$match", {})
+        matched_docs = [doc for doc in self.docs if self._matches(doc, match)]
+
+        has_wallet_balance_projection = any(
+            "$project" in stage and "saldo_disponible" in stage["$project"]
+            for stage in pipeline
+        )
+
+        if has_wallet_balance_projection:
+            wallet_address = self._extract_wallet_address(match)
+
+            total_ingresos = sum(
+                doc.get("monto", 0.0)
+                for doc in matched_docs
+                if doc.get("hacia") == wallet_address
+            )
+            total_egresos = sum(
+                doc.get("monto", 0.0)
+                for doc in matched_docs
+                if doc.get("desde") == wallet_address
+            )
+
+            if not matched_docs:
+                return FakeAggregateCursor([])
+
+            return FakeAggregateCursor(
+                [{"saldo_disponible": total_ingresos - total_egresos}]
+            )
+
+        total = sum(doc.get("monto", 0.0) for doc in matched_docs)
         return FakeAggregateCursor([{"_id": None, "total": total}] if total else [])
 
 

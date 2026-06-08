@@ -33,6 +33,17 @@ El Módulo A se encarga de la capa de identidad y seguridad del proyecto:
 * Documentacion API (Swagger): `http://localhost:8001/docs`
 * Ejecutar tests: `python -m uv run pytest -q`
 
+### 🧪 Pruebas agregadas y cobertura
+La suite combina pruebas black-box y white-box para buscar defectos, no solo confirmar casos felices.
+
+* **Black-box / use case coverage:** `tests/test_password_reset.py` cubre los flujos US-13/US-14 de recuperacion y reset de contrasena, incluyendo usuario inexistente, token invalido, token expirado, token de un solo uso y errores controlados del proveedor Resend.
+* **Black-box / equivalence partitioning:** `tests/test_authentication_and_security.py` valida entradas validas e invalidas para login, emails, contrasenas, campos extra, hashes y generacion de wallet.
+* **Black-box / boundary value analysis:** se prueban fronteras de contrasena de 7 y 8 caracteres y formato de wallet de 40 caracteres hexadecimales.
+* **White-box / branch coverage:** `tests/test_wallet_service.py` fuerza ramas de saldo con ingresos, egresos, transacciones pendientes, saldo cero, saldo negativo, wallet inexistente y usuario no autorizado.
+* **White-box / branch coverage:** `tests/test_authentication_and_security.py` fuerza ramas de JWT valido, token sin `user_id`, firma invalida y token expirado en `get_current_user()`.
+* **White-box / branch coverage:** `tests/test_user_registration.py` cubre registro exitoso, email duplicado, password invalida y rollback transaccional cuando falla la insercion de wallet.
+* **Contract/config coverage:** `tests/test_auth_openapi.py` y `tests/test_docker_runtime_config.py` previenen regresiones en Swagger, `.env.example`, Docker Compose y variables Resend usadas por TECH-07.
+
 ### ▶️ Opciones para correr el proyecto
 * Opción 1 (API + MongoDB en Docker): `docker compose up --build`
 * Opción 2 (MongoDB en Docker + API local): `docker compose up -d mongo mongo-init` y luego `python -m uv run uvicorn src.main:app --reload --port 8001`
@@ -88,14 +99,17 @@ La respuesta no incluye el token; siempre retorna un mensaje generico para evita
 
 5. Revisar la bandeja de entrada del correo registrado y abrir el enlace recibido.
 
-6. Para ambiente local puedes configurar en `.env`:
+6. TECH-07 usa Resend como proveedor transaccional con dominio remitente verificado; Docker pasa estas variables desde `.env` al contenedor API. Para ambiente local puedes configurar:
 ```bash
 RESEND_API_KEY=<tu_api_key_real>
 RESEND_FROM_EMAIL="UFROCoin <no-reply@ufrocoin.email>"
+RESEND_RESET_SUBJECT=Recuperacion de contrasena UFROCoin
 PASSWORD_RESET_BASE_URL=http://localhost:5173/reset-password
+RESEND_TIMEOUT_SECONDS=10
 ```
 
 En ambientes desplegados, ajustar `PASSWORD_RESET_BASE_URL` al frontend real.
+Si Resend no esta configurado, falla o expira, `POST /api/users/forgot-password` responde `500` con codigos controlados (`EMAIL_PROVIDER_NOT_CONFIGURED`, `EMAIL_DELIVERY_ERROR` o `EMAIL_DELIVERY_TIMEOUT`) sin exponer credenciales.
 
 7. Si necesitas probar manualmente `POST /api/users/reset-password`, usa el `token` del enlace recibido:
 ```json

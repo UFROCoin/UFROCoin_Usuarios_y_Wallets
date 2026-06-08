@@ -7,6 +7,7 @@ def _responses_for(path, method="post"):
 
 def test_forgot_password_openapi_documents_standard_responses():
     responses = _responses_for("/api/users/forgot-password")
+    response_500 = responses["500"]
 
     assert responses["200"]["content"]["application/json"]["example"] == {
         "success": True,
@@ -15,7 +16,11 @@ def test_forgot_password_openapi_documents_standard_responses():
         "error": {"code": "", "details": ""},
     }
     assert responses["400"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
-    assert responses["500"]["content"]["application/json"]["example"]["error"]["code"] == "DATABASE_ERROR"
+    assert "Resend" in response_500["description"]
+    assert response_500["content"]["application/json"]["example"]["error"]["code"] == "EMAIL_DELIVERY_ERROR"
+    examples = response_500["content"]["application/json"]["examples"]
+    assert examples["timeout"]["value"]["error"]["code"] == "EMAIL_DELIVERY_TIMEOUT"
+    assert examples["provider_not_configured"]["value"]["error"]["code"] == "EMAIL_PROVIDER_NOT_CONFIGURED"
 
 
 def test_reset_password_openapi_documents_error_codes():

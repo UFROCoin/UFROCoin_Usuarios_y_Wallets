@@ -159,7 +159,7 @@ async def register(payload: UserRegister, db=Depends(get_database)):
     description=(
         "Solicita recuperacion de contrasena sin revelar si el email existe. "
         "Si existe, genera token JWT con firma dinamica (SECRET_KEY + password_hash actual) "
-        "y notifica el enlace por el servicio de notificaciones."
+        "y envia el enlace por correo usando Resend como proveedor transaccional."
     ),
     operation_id="forgotPassword",
     response_model=ApiSuccessResponse[dict[str, Any]],
@@ -197,7 +197,10 @@ async def register(payload: UserRegister, db=Depends(get_database)):
         },
         500: {
             "model": ApiErrorResponse,
-            "description": "Error interno al enviar correo de recuperacion.",
+            "description": (
+                "Error controlado al enviar correo de recuperacion con Resend: "
+                "proveedor no configurado, timeout o fallo de entrega."
+            ),
             "content": {
                 "application/json": {
                     "example": {
@@ -208,7 +211,45 @@ async def register(payload: UserRegister, db=Depends(get_database)):
                             "code": "EMAIL_DELIVERY_ERROR",
                             "details": "Error interno al enviar el enlace de recuperacion.",
                         },
-                    }
+                    },
+                    "examples": {
+                        "delivery_error": {
+                            "summary": "Fallo de entrega",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_DELIVERY_ERROR",
+                                    "details": "Error interno al enviar el enlace de recuperacion.",
+                                },
+                            },
+                        },
+                        "timeout": {
+                            "summary": "Timeout del proveedor",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_DELIVERY_TIMEOUT",
+                                    "details": "El proveedor de correo no respondio dentro del tiempo esperado.",
+                                },
+                            },
+                        },
+                        "provider_not_configured": {
+                            "summary": "Proveedor no configurado",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_PROVIDER_NOT_CONFIGURED",
+                                    "details": "El proveedor de correo no se encuentra configurado correctamente.",
+                                },
+                            },
+                        },
+                    },
                 }
             },
         },

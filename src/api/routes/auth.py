@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from src.core.config import settings
 from src.core.database import get_database
+from src.core.security import get_current_user
 from src.models.api_response import (
     ApiErrorResponse,
     ApiSuccessResponse,
@@ -12,12 +13,14 @@ from src.models.api_response import (
 from src.models.user import (
     ForgotPasswordRequest,
     LoginRequest,
+    MeResponseData,
     ResetPasswordRequest,
     UserRegister,
 )
 from src.services.token_service import generate_token
 from src.services.user_service import (
     authenticate_user,
+    get_my_profile,
     register_user_with_wallet,
     request_password_recovery,
     reset_user_password,
@@ -151,6 +154,69 @@ async def login(payload: LoginRequest, db=Depends(get_database)):
 )
 async def register(payload: UserRegister, db=Depends(get_database)):
     return await register_user_with_wallet(payload=payload, db=db)
+
+
+@router.get(
+    "/api/users/me",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener cuenta del usuario autenticado",
+    description=(
+        "Retorna la informacion personal del usuario autenticado y su saldo actual confirmado. "
+        "En este sprint, el historial se retorna como arreglo vacio."
+    ),
+    operation_id="getAuthenticatedUserProfile",
+    response_model=ApiSuccessResponse[MeResponseData],
+    responses={
+        200: {
+            "model": ApiSuccessResponse[MeResponseData],
+            "description": "Cuenta consultada correctamente.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Cuenta consultada correctamente.",
+                        "data": {
+                            "nombre": "Ana Perez",
+                            "email": "ana.perez@ufrontera.cl",
+                            "wallet_address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                            "balance": 100.0,
+                            "history": [],
+                        },
+                        "error": {
+                            "code": "",
+                            "details": "",
+                        },
+                    }
+                }
+            },
+        },
+        401: {
+            "model": ApiErrorResponse,
+            "description": "Token invalido o usuario no autenticado.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible obtener la cuenta del usuario autenticado.",
+                        "data": {},
+                        "error": {
+                            "code": "UNAUTHORIZED",
+                            "details": "Token invalido o usuario no encontrado.",
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def get_me(db=Depends(get_database), current_user=Depends(get_current_user)):
+    profile_data = await get_my_profile(user_id=current_user["id"], db=db)
+    return ApiSuccessResponse[MeResponseData](
+        success=True,
+        message="Cuenta consultada correctamente.",
+        data=profile_data,
+        error={"code": "", "details": ""},
+    )
 
 @router.post(
     "/api/users/forgot-password",

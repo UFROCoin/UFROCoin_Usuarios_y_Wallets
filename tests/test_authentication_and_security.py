@@ -6,10 +6,11 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
+from src.api.routes.auth import get_me
 from src.core.config import settings
 from src.core.security import get_current_user
 from src.models.user import ForgotPasswordRequest, LoginRequest, UserRegister
-from src.services.user_service import authenticate_user
+from src.services.user_service import authenticate_user, get_my_profile
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
 
@@ -25,9 +26,47 @@ class FakeUsersCollection:
         return None
 
 
+class FakeAggregateCursor:
+    def __init__(self, result):
+        self.result = result
+
+    async def to_list(self, length):
+        return self.result[:length]
+
+
+class FakeTransactionsCollection:
+    def __init__(self, docs=None):
+        self.docs = docs or []
+
+    def aggregate(self, pipeline):
+        match = pipeline[0].get("$match", {})
+        address = None
+        for condition in match.get("$or", []):
+            address = condition.get("desde") or condition.get("hacia")
+            if address:
+                break
+
+        confirmed_docs = [
+            doc
+            for doc in self.docs
+            if doc.get("estado") == "CONFIRMED"
+            and (doc.get("desde") == address or doc.get("hacia") == address)
+        ]
+
+        if not confirmed_docs:
+            return FakeAggregateCursor([])
+
+        total_ingresos = sum(doc.get("monto", 0.0) for doc in confirmed_docs if doc.get("hacia") == address)
+        total_egresos = sum(doc.get("monto", 0.0) for doc in confirmed_docs if doc.get("desde") == address)
+        return FakeAggregateCursor([{"saldo_disponible": total_ingresos - total_egresos}])
+
+
 class FakeDB:
-    def __init__(self, users=None):
-        self.collections = {"users": FakeUsersCollection(users)}
+    def __init__(self, users=None, transacciones=None):
+        self.collections = {
+            "users": FakeUsersCollection(users),
+            "transacciones": FakeTransactionsCollection(transacciones),
+        }
 
     def __getitem__(self, key):
         return self.collections[key]
@@ -159,3 +198,65 @@ def test_auth_request_models_reject_invalid_email_and_extra_fields():
 
     with pytest.raises(ValidationError):
         ForgotPasswordRequest(email="ana@ufro.cl", token="unexpected")
+
+
+@pytest.mark.asyncio
+async def test_get_my_profile_returns_account_info_and_empty_history():
+    wallet_address = "a" * 40
+    db = FakeDB(
+        users=[
+            {
+                "_id": "user_1",
+                "nombre": "Ana Perez",
+                "email": "ana@ufro.cl",
+                "wallet_address": wallet_address,
+            }
+        ],
+        transacciones=[
+            {"desde": "SYSTEM", "hacia": wallet_address, "monto": 100.0, "estado": "CONFIRMED"},
+            {"desde": wallet_address, "hacia": "b" * 40, "monto": 25.0, "estado": "CONFIRMED"},
+            {"desde": "c" * 40, "hacia": wallet_address, "monto": 999.0, "estado": "PENDING"},
+        ],
+    )
+
+    profile = await get_my_profile("user_1", db)
+
+    assert profile.nombre == "Ana Perez"
+    assert profile.email == "ana@ufro.cl"
+    assert profile.wallet_address == wallet_address
+    assert profile.balance == 75.0
+    assert profile.history == []
+
+
+@pytest.mark.asyncio
+async def test_get_my_profile_rejects_missing_user():
+    with pytest.raises(HTTPException) as exc_info:
+        await get_my_profile("missing_user", FakeDB())
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "UNAUTHORIZED"
+
+
+@pytest.mark.asyncio
+async def test_get_me_endpoint_returns_profile_response_contract():
+    wallet_address = "b" * 40
+    db = FakeDB(
+        users=[
+            {
+                "_id": "user_2",
+                "nombre": "Juan Soto",
+                "email": "juan@ufro.cl",
+                "wallet_address": wallet_address,
+            }
+        ],
+        transacciones=[
+            {"desde": "SYSTEM", "hacia": wallet_address, "monto": 50.0, "estado": "CONFIRMED"},
+        ],
+    )
+
+    response = await get_me(db=db, current_user={"id": "user_2"})
+
+    assert response.success is True
+    assert response.message == "Cuenta consultada correctamente."
+    assert response.data.wallet_address == wallet_address
+    assert response.data.history == []

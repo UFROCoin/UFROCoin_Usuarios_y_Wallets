@@ -12,7 +12,7 @@ from src.models.api_response import (
     ApiSuccessResponse,
     RegisterUserResponseData,
 )
-from src.models.user import UserRegister
+from src.models.user import MeResponseData, UserRegister
 from src.services.notification_service import (
     INotificationService,
     NotificationDeliveryError,
@@ -21,7 +21,7 @@ from src.services.notification_service import (
     get_default_notification_service,
 )
 from src.services.token_service import generate_password_recovery_token
-from src.services.wallet_service import calcular_saldo_real, obtener_transacciones_recientes
+from src.services.wallet_service import calcular_saldo_real
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
 
@@ -53,6 +53,37 @@ async def authenticate_user(email: str, password: str, db):
         return user
         
     return False
+
+
+async def get_my_profile(user_id: str, db: AsyncIOMotorDatabase) -> MeResponseData:
+    users_collection = db["users"]
+
+    user = None
+    if ObjectId.is_valid(user_id):
+        user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if user is None:
+        user = await users_collection.find_one({"_id": user_id})
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "No fue posible obtener la cuenta del usuario autenticado.",
+                "code": "UNAUTHORIZED",
+                "details": "Token invalido o usuario no encontrado.",
+            },
+        )
+
+    wallet_address = user["wallet_address"]
+    balance = await calcular_saldo_real(wallet_address, db)
+
+    return MeResponseData(
+        nombre=user["nombre"],
+        email=user["email"],
+        wallet_address=wallet_address,
+        balance=balance,
+        history=[],
+    )
 
 async def request_password_recovery(
     email: str,

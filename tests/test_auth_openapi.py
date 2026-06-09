@@ -33,3 +33,12 @@ def test_reset_password_openapi_documents_error_codes():
     assert responses["400"]["content"]["application/json"]["example"]["error"]["code"] == "VALIDATION_ERROR"
     assert responses["401"]["content"]["application/json"]["example"]["error"]["code"] == "INVALID_OR_EXPIRED_TOKEN"
     assert responses["500"]["content"]["application/json"]["example"]["error"]["code"] == "DATABASE_ERROR"
+
+
+def test_get_me_openapi_documents_response_and_unauthorized_error():
+    responses = _responses_for("/api/users/me", method="get")
+
+    assert responses["200"]["content"]["application/json"]["example"]["data"]["history"] == []
+    assert responses["200"]["content"]["application/json"]["example"]["data"]["wallet_address"]
+    assert responses["401"]["content"]["application/json"]["example"]["success"] is False
+    assert responses["401"]["content"]["application/json"]["example"]["error"]["code"] == "UNAUTHORIZED"

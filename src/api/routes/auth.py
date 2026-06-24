@@ -1,16 +1,30 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
-
+from fastapi.responses import JSONResponse
 from src.core.config import settings
 from src.core.database import get_database
+from src.core.security import get_current_user
 from src.models.api_response import (
-    ApiErrorResponse, 
-    ApiSuccessResponse, 
+    ApiErrorResponse,
+    ApiSuccessResponse,
     LoginResponseData,
-    RegisterUserResponseData
+    RegisterUserResponseData,
 )
-from src.models.user import UserRegister, LoginRequest
-from src.services.user_service import register_user_with_wallet, authenticate_user
+from src.models.user import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    MeResponseData,
+    ResetPasswordRequest,
+    UserRegister,
+)
 from src.services.token_service import generate_token
+from src.services.user_service import (
+    authenticate_user,
+    get_my_profile,
+    register_user_with_wallet,
+    request_password_recovery,
+    reset_user_password,
+)
 
 
 router = APIRouter(tags=["Auth"])
@@ -140,3 +154,259 @@ async def login(payload: LoginRequest, db=Depends(get_database)):
 )
 async def register(payload: UserRegister, db=Depends(get_database)):
     return await register_user_with_wallet(payload=payload, db=db)
+
+
+@router.get(
+    "/api/users/me",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener cuenta del usuario autenticado",
+    description=(
+        "Retorna la informacion personal del usuario autenticado y su saldo actual confirmado. "
+        "En este sprint, el historial se retorna como arreglo vacio."
+    ),
+    operation_id="getAuthenticatedUserProfile",
+    response_model=ApiSuccessResponse[MeResponseData],
+    responses={
+        200: {
+            "model": ApiSuccessResponse[MeResponseData],
+            "description": "Cuenta consultada correctamente.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Cuenta consultada correctamente.",
+                        "data": {
+                            "nombre": "Ana Perez",
+                            "email": "ana.perez@ufrontera.cl",
+                            "wallet_address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                            "balance": 100.0,
+                            "history": [],
+                        },
+                        "error": {
+                            "code": "",
+                            "details": "",
+                        },
+                    }
+                }
+            },
+        },
+        401: {
+            "model": ApiErrorResponse,
+            "description": "Token invalido o usuario no autenticado.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible obtener la cuenta del usuario autenticado.",
+                        "data": {},
+                        "error": {
+                            "code": "UNAUTHORIZED",
+                            "details": "Token invalido o usuario no encontrado.",
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def get_me(db=Depends(get_database), current_user=Depends(get_current_user)):
+    profile_data = await get_my_profile(user_id=current_user["id"], db=db)
+    return ApiSuccessResponse[MeResponseData](
+        success=True,
+        message="Cuenta consultada correctamente.",
+        data=profile_data,
+        error={"code": "", "details": ""},
+    )
+
+@router.post(
+    "/api/users/forgot-password",
+    status_code=status.HTTP_200_OK,
+    summary="Solicitar recuperacion de contrasena",
+    description=(
+        "Solicita recuperacion de contrasena sin revelar si el email existe. "
+        "Si existe, genera token JWT con firma dinamica (SECRET_KEY + password_hash actual) "
+        "y envia el enlace por correo usando Resend como proveedor transaccional."
+    ),
+    operation_id="forgotPassword",
+    response_model=ApiSuccessResponse[dict[str, Any]],
+    responses={
+        200: {
+            "model": ApiSuccessResponse[dict[str, Any]],
+            "description": "Respuesta generica anti-enumeracion.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+                        "data": {},
+                        "error": {"code": "", "details": ""},
+                    }
+                }
+            },
+        },
+        400: {
+            "model": ApiErrorResponse,
+            "description": "Error de validacion del body.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Datos invalidos o contrasena debil.",
+                        "data": {},
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "details": "email debe tener formato valido.",
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "model": ApiErrorResponse,
+            "description": (
+                "Error controlado al enviar correo de recuperacion con Resend: "
+                "proveedor no configurado, timeout o fallo de entrega."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible enviar el correo de recuperacion.",
+                        "data": {},
+                        "error": {
+                            "code": "EMAIL_DELIVERY_ERROR",
+                            "details": "Error interno al enviar el enlace de recuperacion.",
+                        },
+                    },
+                    "examples": {
+                        "delivery_error": {
+                            "summary": "Fallo de entrega",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_DELIVERY_ERROR",
+                                    "details": "Error interno al enviar el enlace de recuperacion.",
+                                },
+                            },
+                        },
+                        "timeout": {
+                            "summary": "Timeout del proveedor",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_DELIVERY_TIMEOUT",
+                                    "details": "El proveedor de correo no respondio dentro del tiempo esperado.",
+                                },
+                            },
+                        },
+                        "provider_not_configured": {
+                            "summary": "Proveedor no configurado",
+                            "value": {
+                                "success": False,
+                                "message": "No fue posible enviar el correo de recuperacion.",
+                                "data": {},
+                                "error": {
+                                    "code": "EMAIL_PROVIDER_NOT_CONFIGURED",
+                                    "details": "El proveedor de correo no se encuentra configurado correctamente.",
+                                },
+                            },
+                        },
+                    },
+                }
+            },
+        },
+    },
+)
+async def forgot_password(payload: ForgotPasswordRequest, db=Depends(get_database)):
+    result = await request_password_recovery(email=payload.email, db=db)
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result)
+
+
+@router.post(
+    "/api/users/reset-password",
+    status_code=status.HTTP_200_OK,
+    summary="Restablecer contrasena",
+    description=(
+        "Valida token JWT con firma dinamica (SECRET_KEY + hash actual). "
+        "Si es valido, actualiza la contrasena hasheada en MongoDB."
+    ),
+    operation_id="resetPassword",
+    response_model=ApiSuccessResponse[dict],
+    responses={
+        200: {
+            "model": ApiSuccessResponse[dict],
+            "description": "Contrasena restablecida correctamente.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Contrasena restablecida correctamente.",
+                        "data": {},
+                        "error": {"code": "", "details": ""},
+                    }
+                }
+            },
+        },
+        400: {
+            "model": ApiErrorResponse,
+            "description": "Error de validacion del body.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Datos invalidos o contrasena debil.",
+                        "data": {},
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "details": "new_password es obligatorio y debe tener al menos 8 caracteres.",
+                        },
+                    }
+                }
+            },
+        },
+        401: {
+            "model": ApiErrorResponse,
+            "description": "Token invalido, expirado o firma no coincide.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Token de recuperacion invalido o expirado.",
+                        "data": {},
+                        "error": {
+                            "code": "INVALID_OR_EXPIRED_TOKEN",
+                            "details": "El token no es valido, expiro o ya fue invalidado por cambio de contrasena.",
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "model": ApiErrorResponse,
+            "description": "Error interno o de base de datos.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "No fue posible restablecer la contrasena.",
+                        "data": {},
+                        "error": {
+                            "code": "DATABASE_ERROR",
+                            "details": "Error interno al actualizar la contrasena del usuario en la base de datos.",
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def reset_password(payload: ResetPasswordRequest, db=Depends(get_database)):
+    return await reset_user_password(
+        token=payload.token,
+        new_password=payload.new_password,
+        db=db,
+    )

@@ -55,7 +55,11 @@ async def authenticate_user(email: str, password: str, db):
     return False
 
 
-async def get_my_profile(user_id: str, db: AsyncIOMotorDatabase) -> MeResponseData:
+async def get_my_profile(
+    user_id: str,
+    db: AsyncIOMotorDatabase,
+    access_token: str | None = None,
+) -> MeResponseData:
     users_collection = db["users"]
 
     user = None
@@ -75,7 +79,7 @@ async def get_my_profile(user_id: str, db: AsyncIOMotorDatabase) -> MeResponseDa
         )
 
     wallet_address = user["wallet_address"]
-    balance = await calcular_saldo_real(wallet_address, db)
+    balance = await calcular_saldo_real(wallet_address, db, access_token=access_token)
 
     return MeResponseData(
         nombre=user["nombre"],

@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from src.core.config import settings
 from src.core.database import get_database
@@ -28,6 +28,17 @@ from src.services.user_service import (
 
 
 router = APIRouter(tags=["Auth"])
+
+
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not isinstance(authorization, str) or not authorization:
+        return None
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+
+    return token
 
 
 @router.post(
@@ -209,8 +220,16 @@ async def register(payload: UserRegister, db=Depends(get_database)):
         },
     },
 )
-async def get_me(db=Depends(get_database), current_user=Depends(get_current_user)):
-    profile_data = await get_my_profile(user_id=current_user["id"], db=db)
+async def get_me(
+    authorization: str | None = Header(default=None),
+    db=Depends(get_database),
+    current_user=Depends(get_current_user),
+):
+    profile_data = await get_my_profile(
+        user_id=current_user["id"],
+        db=db,
+        access_token=_extract_bearer_token(authorization),
+    )
     return ApiSuccessResponse[MeResponseData](
         success=True,
         message="Cuenta consultada correctamente.",

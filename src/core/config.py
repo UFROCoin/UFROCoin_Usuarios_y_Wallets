@@ -15,6 +15,11 @@ class Settings:
         self.resend_reset_subject = os.getenv("RESEND_RESET_SUBJECT","Recuperacion de contrasena UFROCoin")
         self.resend_timeout_seconds = float(os.getenv("RESEND_TIMEOUT_SECONDS", "10"))
         self.password_reset_base_url = os.getenv("PASSWORD_RESET_BASE_URL","http://localhost:5173/reset-password")
+        self.blockchain_transactions_api_url = os.getenv("BLOCKCHAIN_TRANSACTIONS_API_URL", "").rstrip("/")
+        self.blockchain_transactions_timeout_seconds = float(
+            os.getenv("BLOCKCHAIN_TRANSACTIONS_TIMEOUT_SECONDS", "5")
+        )
+        self.wallet_internal_token = os.getenv("WALLET_INTERNAL_TOKEN", "")
 
 
 settings = Settings()

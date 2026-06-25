@@ -4,6 +4,9 @@ import pytest
 from fastapi import HTTPException
 
 from src.api.routes.wallet import consultar_wallet
+from src.api.routes.wallet import consultar_existencia_wallet_interna
+from src.core.config import settings
+from src.core.security import verify_internal_wallet_token
 from src.services.wallet_service import calcular_saldo_real, obtener_detalle_wallet
 
 
@@ -193,6 +196,78 @@ async def test_consultar_wallet_permite_usuario_dueno():
     assert response.success is True
     assert response.data.address == wallet
     assert response.data.balance == 100.0
+
+
+@pytest.mark.asyncio
+async def test_us10_calcula_saldo_con_transacciones_confirmadas_de_blockchain(monkeypatch):
+    wallet = "a" * 40
+    db = FakeDB(
+        transacciones=[
+            {"hacia": wallet, "desde": "SYSTEM", "monto": 100.0, "estado": "CONFIRMED"},
+        ]
+    )
+
+    async def fake_historial(wallet_address, access_token):
+        assert wallet_address == wallet
+        assert access_token == "jwt-usuario"
+        return [
+            {"to": wallet, "from": "b" * 40, "amount": 25.5, "status": "CONFIRMED"},
+            {"from": wallet, "to": "c" * 40, "amount": 40.25, "status": "CONFIRMED"},
+            {"to": wallet, "from": "d" * 40, "amount": 999.0, "status": "PENDING"},
+        ]
+
+    monkeypatch.setattr(settings, "blockchain_transactions_api_url", "http://blockchain:8000/api")
+    monkeypatch.setattr("src.services.wallet_service.obtener_transacciones_blockchain", fake_historial)
+
+    saldo = await calcular_saldo_real(wallet, db, access_token="jwt-usuario")
+
+    assert saldo == 85.25
+
+
+@pytest.mark.asyncio
+async def test_internal_wallet_exists_retorna_solo_existencia_sin_datos_sensibles():
+    wallet = "a" * 40
+    db = FakeDB(
+        wallets=[
+            {
+                "address": wallet,
+                "user_id": "owner_1",
+                "email": "owner@example.com",
+                "created_at": datetime.now(timezone.utc),
+            }
+        ],
+    )
+
+    response = await consultar_existencia_wallet_interna(address=wallet, db=db, _=None)
+    payload = response.data.model_dump()
+
+    assert response.success is True
+    assert payload == {"exists": True, "address": wallet}
+    assert "owner_id" not in payload
+    assert "email" not in payload
+
+
+@pytest.mark.asyncio
+async def test_internal_wallet_exists_retorna_false_si_no_existe():
+    wallet = "a" * 40
+
+    response = await consultar_existencia_wallet_interna(address=wallet, db=FakeDB(), _=None)
+
+    assert response.data.exists is False
+    assert response.data.address == wallet
+
+
+@pytest.mark.asyncio
+async def test_internal_wallet_token_rechaza_token_incorrecto(monkeypatch):
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    monkeypatch.setattr(settings, "wallet_internal_token", "token-correcto")
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token-incorrecto")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_internal_wallet_token(credentials)
+
+    assert exc_info.value.status_code == 401
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock

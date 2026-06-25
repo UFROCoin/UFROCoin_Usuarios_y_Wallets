@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from typing import Any
 from urllib.parse import urlencode
 import jwt
@@ -8,6 +9,7 @@ from jwt import InvalidTokenError
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
 from src.core.config import settings
+from src.core.rabbitmq_publisher import WALLET_CREDIT_ROUTING_KEY, publish_event
 from src.models.api_response import (
     ApiSuccessResponse,
     RegisterUserResponseData,
@@ -28,6 +30,9 @@ from src.services.wallet_service import (
 )
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
+
+
+logger = logging.getLogger(__name__)
 
 
 def _invalid_recovery_token_error() -> HTTPException:
@@ -247,6 +252,26 @@ async def register_user_with_wallet(payload: UserRegister, db):
                 "details": "Fallo en la transaccion de creacion de usuario y wallet.",
             },
         ) from exc
+
+    event_timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    wallet_credit_payload = {
+        "event_type": "wallet.credit.issued",
+        "occurred_at": event_timestamp,
+        "source": "users-service",
+        "data": {
+            "credit_id": str(user_result.inserted_id),
+            "from": "SYSTEM_REWARD",
+            "to": wallet_address,
+            "amount": settings.initial_wallet_balance,
+            "type": "GENESIS",
+            "status": "CONFIRMED",
+            "timestamp": event_timestamp,
+        },
+    }
+    try:
+        publish_event(WALLET_CREDIT_ROUTING_KEY, wallet_credit_payload)
+    except Exception as exc:
+        logger.warning("Could not publish wallet credit issued event: %s", exc)
 
     response_data = RegisterUserResponseData(
         user_id=str(user_result.inserted_id),

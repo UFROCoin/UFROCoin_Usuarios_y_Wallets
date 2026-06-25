@@ -172,8 +172,8 @@ async def register(payload: UserRegister, db=Depends(get_database)):
     status_code=status.HTTP_200_OK,
     summary="Obtener cuenta del usuario autenticado",
     description=(
-        "Retorna la informacion personal del usuario autenticado y su saldo actual confirmado. "
-        "En este sprint, el historial se retorna como arreglo vacio."
+        "Retorna la informacion personal del usuario autenticado, su saldo actual confirmado "
+        "y las ultimas transacciones asociadas a su wallet."
     ),
     operation_id="getAuthenticatedUserProfile",
     response_model=ApiSuccessResponse[MeResponseData],
@@ -191,7 +191,28 @@ async def register(payload: UserRegister, db=Depends(get_database)):
                             "email": "ana.perez@ufrontera.cl",
                             "wallet_address": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
                             "balance": 100.0,
-                            "history": [],
+                            "history": [
+                                {
+                                    "id": "683f1a2b3c4d5e6f7a8b9c0d",
+                                    "type": "SEND",
+                                    "from": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                                    "to": "b3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f11",
+                                    "amount": 25.0,
+                                    "timestamp": "2026-06-03T22:45:00+00:00",
+                                    "status": "PENDING",
+                                    "block_index": None,
+                                },
+                                {
+                                    "id": "683f1a2b3c4d5e6f7a8b9c0e",
+                                    "type": "RECEIVE",
+                                    "from": "b3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f11",
+                                    "to": "a3f5e2c9d1b84f76a0c91d4e7b3f8a2d5c6e9f10",
+                                    "amount": 10.0,
+                                    "timestamp": "2026-06-02T10:00:00+00:00",
+                                    "status": "CONFIRMED",
+                                    "block_index": 3,
+                                },
+                            ],
                         },
                         "error": {
                             "code": "",

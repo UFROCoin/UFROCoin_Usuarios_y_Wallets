@@ -76,6 +76,7 @@ class FakeDB:
 def configure_jwt_settings(monkeypatch):
     monkeypatch.setattr(settings, "secret_key", "test-secret")
     monkeypatch.setattr(settings, "jwt_algorithm", "HS256")
+    monkeypatch.setattr(settings, "blockchain_transactions_api_url", "")
 
 
 def make_credentials(payload, secret="test-secret"):
@@ -226,6 +227,91 @@ async def test_get_my_profile_returns_account_info_and_empty_history():
     assert profile.wallet_address == wallet_address
     assert profile.balance == 75.0
     assert profile.history == []
+
+
+@pytest.mark.asyncio
+async def test_get_my_profile_returns_external_history_pending_first(monkeypatch):
+    wallet_address = "a" * 40
+    db = FakeDB(
+        users=[
+            {
+                "_id": "user_1",
+                "nombre": "Ana Perez",
+                "email": "ana@ufro.cl",
+                "wallet_address": wallet_address,
+            }
+        ],
+        transacciones=[
+            {"desde": "SYSTEM", "hacia": wallet_address, "monto": 100.0, "estado": "CONFIRMED"},
+        ],
+    )
+
+    expected_wallet_address = wallet_address
+
+    async def fake_historial(wallet_address, access_token):
+        assert wallet_address == expected_wallet_address
+        assert access_token == "jwt-usuario"
+        return [
+            {
+                "_id": "pendiente-antigua",
+                "type": "TRANSFER",
+                "from": "b" * 40,
+                "to": wallet_address,
+                "amount": 999.0,
+                "timestamp": "2026-06-01T10:00:00+00:00",
+                "status": "PENDING",
+            },
+            {
+                "_id": "pendiente-reciente",
+                "type": "TRANSFER",
+                "from": wallet_address,
+                "to": "c" * 40,
+                "amount": 5.0,
+                "timestamp": "2026-06-03T10:00:00+00:00",
+                "status": "PENDING",
+            },
+            {
+                "id": "confirmada-reciente",
+                "type": "TRANSFER",
+                "from": wallet_address,
+                "to": "d" * 40,
+                "amount": 25.0,
+                "timestamp": "2026-06-04T10:00:00+00:00",
+                "status": "CONFIRMED",
+                "block_index": 4,
+            },
+            {
+                "id": "confirmada-antigua",
+                "type": "TRANSFER",
+                "from": "e" * 40,
+                "to": wallet_address,
+                "amount": 10.0,
+                "timestamp": "2026-06-02T10:00:00+00:00",
+                "status": "CONFIRMED",
+                "block_index": 3,
+            },
+        ]
+
+    monkeypatch.setattr(settings, "blockchain_transactions_api_url", "http://blockchain:8000/api")
+    monkeypatch.setattr("src.services.user_service.obtener_transacciones_blockchain", fake_historial)
+
+    profile = await get_my_profile("user_1", db, access_token="jwt-usuario")
+
+    assert profile.balance == 85.0
+    assert [item.id for item in profile.history] == [
+        "pendiente-reciente",
+        "pendiente-antigua",
+        "confirmada-reciente",
+        "confirmada-antigua",
+    ]
+    assert [item.status for item in profile.history] == [
+        "PENDING",
+        "PENDING",
+        "CONFIRMED",
+        "CONFIRMED",
+    ]
+    assert profile.history[0].type == "SEND"
+    assert profile.history[1].type == "RECEIVE"
 
 
 @pytest.mark.asyncio

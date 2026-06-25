@@ -21,7 +21,11 @@ from src.services.notification_service import (
     get_default_notification_service,
 )
 from src.services.token_service import generate_password_recovery_token
-from src.services.wallet_service import calcular_saldo_real
+from src.services.wallet_service import (
+    calcular_saldo_real,
+    normalizar_historial_wallet,
+    obtener_transacciones_blockchain,
+)
 from src.utils.security import hash_contrasena, verificar_contrasena
 from src.utils.wallet import generar_direccion_wallet
 
@@ -79,14 +83,31 @@ async def get_my_profile(
         )
 
     wallet_address = user["wallet_address"]
-    balance = await calcular_saldo_real(wallet_address, db, access_token=access_token)
+    transacciones_externas = None
+    if settings.blockchain_transactions_api_url and access_token:
+        transacciones_externas = await obtener_transacciones_blockchain(
+            wallet_address=wallet_address,
+            access_token=access_token,
+        )
+
+    balance = await calcular_saldo_real(
+        wallet_address,
+        db,
+        access_token=access_token,
+        transacciones_externas=transacciones_externas,
+    )
+    history = normalizar_historial_wallet(
+        wallet_address,
+        transacciones_externas or [],
+        limite=10,
+    )
 
     return MeResponseData(
         nombre=user["nombre"],
         email=user["email"],
         wallet_address=wallet_address,
         balance=balance,
-        history=[],
+        history=history,
     )
 
 async def request_password_recovery(

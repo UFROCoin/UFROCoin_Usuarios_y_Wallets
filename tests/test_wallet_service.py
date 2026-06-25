@@ -7,7 +7,11 @@ from src.api.routes.wallet import consultar_wallet
 from src.api.routes.wallet import consultar_existencia_wallet_interna
 from src.core.config import settings
 from src.core.security import verify_internal_wallet_token
-from src.services.wallet_service import calcular_saldo_real, obtener_detalle_wallet
+from src.services.wallet_service import (
+    calcular_saldo_real,
+    normalizar_historial_wallet,
+    obtener_detalle_wallet,
+)
 
 
 class FakeAggregateCursor:
@@ -222,6 +226,77 @@ async def test_us10_calcula_saldo_con_transacciones_confirmadas_de_blockchain(mo
     saldo = await calcular_saldo_real(wallet, db, access_token="jwt-usuario")
 
     assert saldo == 85.25
+
+
+def test_normalizar_historial_wallet_mapea_campos_y_ordena_pendientes_primero():
+    wallet = "a" * 40
+
+    historial = normalizar_historial_wallet(
+        wallet,
+        [
+            {
+                "_id": "pendiente-antigua",
+                "type": "TRANSFER",
+                "from": "b" * 40,
+                "to": wallet,
+                "amount": 20.0,
+                "timestamp": "2026-06-01T10:00:00+00:00",
+                "status": "PENDING",
+            },
+            {
+                "_id": "pendiente-reciente",
+                "type": "TRANSFER",
+                "from": wallet,
+                "to": "c" * 40,
+                "amount": 5.0,
+                "timestamp": "2026-06-03T10:00:00+00:00",
+                "status": "PENDING",
+            },
+            {
+                "tx_id": "genesis-1",
+                "type": "GENESIS_ISSUANCE",
+                "from_address": "SYSTEM",
+                "to_address": wallet,
+                "amount": 100.0,
+                "timestamp": "2026-06-05T10:00:00+00:00",
+                "status": "CONFIRMED",
+                "block_index": "0",
+            },
+            {
+                "id": "confirmada-1",
+                "type": "TRANSFER",
+                "from": "d" * 40,
+                "to": wallet,
+                "amount": 10.0,
+                "timestamp": "2026-06-04T10:00:00+00:00",
+                "status": "CONFIRMED",
+                "block_index": 4,
+            },
+            {
+                "_id": "no-relacionada",
+                "type": "TRANSFER",
+                "from": "e" * 40,
+                "to": "f" * 40,
+                "amount": 99.0,
+                "timestamp": "2026-06-06T10:00:00+00:00",
+                "status": "PENDING",
+            },
+        ],
+        limite=3,
+    )
+
+    assert [item["id"] for item in historial] == [
+        "pendiente-reciente",
+        "pendiente-antigua",
+        "genesis-1",
+    ]
+    assert [item["status"] for item in historial] == ["PENDING", "PENDING", "CONFIRMED"]
+    assert historial[0]["type"] == "SEND"
+    assert historial[1]["type"] == "RECEIVE"
+    assert historial[2]["type"] == "GENESIS"
+    assert historial[2]["from"] == "SYSTEM"
+    assert historial[2]["to"] == wallet
+    assert historial[2]["block_index"] == 0
 
 
 @pytest.mark.asyncio

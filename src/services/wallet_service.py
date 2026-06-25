@@ -15,6 +15,7 @@ async def calcular_saldo_real(
     wallet_address: str,
     db: AsyncIOMotorDatabase,
     access_token: str | None = None,
+    transacciones_externas: list[dict[str, Any]] | None = None,
 ) -> float:
     """
     Calcula el saldo real de una wallet.
@@ -28,13 +29,14 @@ async def calcular_saldo_real(
     """
     saldo_local = await _calcular_saldo_local(wallet_address, db)
 
-    if not settings.blockchain_transactions_api_url or not access_token:
-        return saldo_local
+    if transacciones_externas is None:
+        if not settings.blockchain_transactions_api_url or not access_token:
+            return saldo_local
 
-    transacciones_externas = await obtener_transacciones_blockchain(
-        wallet_address=wallet_address,
-        access_token=access_token,
-    )
+        transacciones_externas = await obtener_transacciones_blockchain(
+            wallet_address=wallet_address,
+            access_token=access_token,
+        )
     saldo_externo = calcular_delta_confirmado(wallet_address, transacciones_externas)
 
     return float(saldo_local + saldo_externo)
@@ -167,6 +169,96 @@ def calcular_delta_confirmado(wallet_address: str, transacciones: list[dict[str,
             saldo -= monto
 
     return saldo
+
+
+def normalizar_historial_wallet(
+    wallet_address: str,
+    transacciones: list[dict[str, Any]],
+    limite: int = 10,
+) -> list[dict[str, Any]]:
+    if limite <= 0:
+        return []
+
+    history: list[dict[str, Any]] = []
+
+    for transaccion in transacciones:
+        origen = _primer_valor(transaccion, "from", "from_address", "desde")
+        destino = _primer_valor(transaccion, "to", "to_address", "hacia")
+
+        if origen != wallet_address and destino != wallet_address:
+            continue
+
+        history.append(
+            {
+                "id": str(_primer_valor(transaccion, "id", "_id", "tx_id") or ""),
+                "type": _normalizar_tipo_historial(
+                    wallet_address,
+                    str(_primer_valor(transaccion, "type", "tipo") or "TRANSFER"),
+                    origen,
+                    destino,
+                ),
+                "from": str(origen or ""),
+                "to": str(destino or ""),
+                "amount": float(_primer_valor(transaccion, "amount", "monto") or 0.0),
+                "timestamp": str(_primer_valor(transaccion, "timestamp", "created_at") or ""),
+                "status": _normalizar_estado_historial(
+                    str(_primer_valor(transaccion, "status", "estado") or "PENDING")
+                ),
+                "block_index": _normalizar_block_index(
+                    _primer_valor(transaccion, "block_index", "blockIndex")
+                ),
+            }
+        )
+
+    history.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
+    history.sort(key=lambda item: 0 if item["status"] == "PENDING" else 1)
+    return history[:limite]
+
+
+def _primer_valor(transaccion: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = transaccion.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _normalizar_tipo_historial(
+    wallet_address: str,
+    tipo: str,
+    origen: Any,
+    destino: Any,
+) -> str:
+    tipo_normalizado = tipo.upper()
+
+    if tipo_normalizado in {"GENESIS", "GENESIS_ISSUANCE"}:
+        return "GENESIS"
+    if tipo_normalizado == "MINING_REWARD":
+        return "MINING_REWARD"
+    if tipo_normalizado in {"SEND", "RECEIVE"}:
+        return tipo_normalizado
+    if origen == wallet_address:
+        return "SEND"
+    if destino == wallet_address:
+        return "RECEIVE"
+
+    return "RECEIVE"
+
+
+def _normalizar_estado_historial(estado: str) -> str:
+    if estado.upper() == "CONFIRMED":
+        return "CONFIRMED"
+    return "PENDING"
+
+
+def _normalizar_block_index(block_index: Any) -> int | None:
+    if block_index is None:
+        return None
+
+    try:
+        return int(block_index)
+    except (TypeError, ValueError):
+        return None
 
 
 async def obtener_transacciones_recientes(

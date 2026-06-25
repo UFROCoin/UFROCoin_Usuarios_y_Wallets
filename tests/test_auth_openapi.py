@@ -37,8 +37,12 @@ def test_reset_password_openapi_documents_error_codes():
 
 def test_get_me_openapi_documents_response_and_unauthorized_error():
     responses = _responses_for("/api/users/me", method="get")
+    history = responses["200"]["content"]["application/json"]["example"]["data"]["history"]
 
-    assert responses["200"]["content"]["application/json"]["example"]["data"]["history"] == []
+    assert history[0]["status"] == "PENDING"
+    assert history[1]["status"] == "CONFIRMED"
+    assert history[0]["type"] == "SEND"
+    assert history[1]["block_index"] == 3
     assert responses["200"]["content"]["application/json"]["example"]["data"]["wallet_address"]
     assert responses["401"]["content"]["application/json"]["example"]["success"] is False
     assert responses["401"]["content"]["application/json"]["example"]["error"]["code"] == "UNAUTHORIZED"

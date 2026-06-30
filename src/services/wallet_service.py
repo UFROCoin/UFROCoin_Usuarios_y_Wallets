@@ -159,6 +159,10 @@ def calcular_delta_confirmado(wallet_address: str, transacciones: list[dict[str,
         if estado != "CONFIRMED":
             continue
 
+        tipo = (transaccion.get("type") or transaccion.get("tipo") or "").upper()
+        if tipo in {"GENESIS", "GENESIS_ISSUANCE"}:
+            continue
+
         origen = transaccion.get("from") or transaccion.get("from_address") or transaccion.get("desde")
         destino = transaccion.get("to") or transaccion.get("to_address") or transaccion.get("hacia")
         monto = float(transaccion.get("amount") or transaccion.get("monto") or 0.0)

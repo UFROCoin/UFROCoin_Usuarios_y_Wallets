@@ -8,6 +8,7 @@ from src.api.routes.wallet import consultar_existencia_wallet_interna
 from src.core.config import settings
 from src.core.security import verify_internal_wallet_token
 from src.services.wallet_service import (
+    calcular_delta_confirmado,
     calcular_saldo_real,
     normalizar_historial_wallet,
     obtener_detalle_wallet,
@@ -226,6 +227,104 @@ async def test_us10_calcula_saldo_con_transacciones_confirmadas_de_blockchain(mo
     saldo = await calcular_saldo_real(wallet, db, access_token="jwt-usuario")
 
     assert saldo == 85.25
+
+
+def test_calcular_delta_confirmado_ignora_genesis_federado():
+    wallet = "a" * 40
+
+    delta = calcular_delta_confirmado(
+        wallet,
+        [
+            {
+                "type": "GENESIS",
+                "from": "SYSTEM",
+                "to": wallet,
+                "amount": 100.0,
+                "status": "CONFIRMED",
+            }
+        ],
+    )
+
+    assert delta == 0.0
+
+
+def test_calcular_delta_confirmado_cuenta_transferencias_confirmadas():
+    wallet = "a" * 40
+
+    delta = calcular_delta_confirmado(
+        wallet,
+        [
+            {
+                "type": "TRANSFER",
+                "from": "b" * 40,
+                "to": wallet,
+                "amount": 25.5,
+                "status": "CONFIRMED",
+            },
+            {
+                "type": "TRANSFER",
+                "from": wallet,
+                "to": "c" * 40,
+                "amount": 40.25,
+                "status": "CONFIRMED",
+            },
+        ],
+    )
+
+    assert delta == -14.75
+
+
+def test_calcular_delta_confirmado_mezcla_genesis_y_transferencias():
+    wallet = "a" * 40
+
+    delta = calcular_delta_confirmado(
+        wallet,
+        [
+            {
+                "type": "GENESIS_ISSUANCE",
+                "from_address": "SYSTEM",
+                "to_address": wallet,
+                "amount": 100.0,
+                "status": "CONFIRMED",
+            },
+            {
+                "type": "TRANSFER",
+                "from_address": "b" * 40,
+                "to_address": wallet,
+                "amount": 30.0,
+                "status": "CONFIRMED",
+            },
+        ],
+    )
+
+    assert delta == 30.0
+
+
+@pytest.mark.asyncio
+async def test_calcular_saldo_real_no_duplica_welcome_federado():
+    wallet = "a" * 40
+    db = FakeDB(
+        transacciones=[
+            {"hacia": wallet, "desde": "SYSTEM", "monto": 100.0, "estado": "CONFIRMED"},
+        ]
+    )
+
+    saldo = await calcular_saldo_real(
+        wallet,
+        db,
+        transacciones_externas=[
+            {
+                "type": "GENESIS",
+                "from": "SYSTEM",
+                "to": wallet,
+                "amount": 100.0,
+                "status": "CONFIRMED",
+                "block_index": None,
+            }
+        ],
+    )
+
+    assert saldo == 100.0
 
 
 def test_normalizar_historial_wallet_mapea_campos_y_ordena_pendientes_primero():
